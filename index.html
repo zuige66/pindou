@@ -413,26 +413,27 @@
           const grayVals=samples.map(c=>0.299*c[0]+0.587*c[1]+0.114*c[2]);
           let hist=new Array(256).fill(0);
           grayVals.forEach(v=>hist[Math.round(v)]++);
-          let total=grayVals.length,sum=0,sumB=0,wB=0,maxVar=-1,threshold=128;
+          const total=grayVals.length;
+          let sumTotal=0;
+          for(let i=0;i<256;i++)sumTotal+=i*hist[i];
+          let wB=0,sumB=0,maxVar=-1,threshold=128;
           for(let t=0;t<256;t++){
             wB+=hist[t];
             if(wB===0)continue;
             const wF=total-wB;
             if(wF===0)break;
-            sum+=t*hist[t];
-            const mB=sum/wB;
             sumB+=t*hist[t];
-            const mF=(total-sumB)/wF;
+            const mB=sumB/wB;
+            const mF=(sumTotal-sumB)/wF;
             const between=wB*wF*(mB-mF)*(mB-mF);
             if(between>maxVar){maxVar=between;threshold=t}
           }
-          let blackIdx=0,whiteIdx=0,bdB=Infinity,bdW=Infinity;
+          let blackIdx=0,whiteIdx=0,minG=256,maxG=-1;
           for(let pi=0;pi<pal.length;pi++){
             const gr=rgb(pal[pi][2]);
             const g=0.299*gr[0]+0.587*gr[1]+0.114*gr[2];
-            const dB=Math.abs(g-threshold),dW=Math.abs(g-threshold);
-            if(g<threshold&&dB<bdB){bdB=dB;blackIdx=pi}
-            if(g>=threshold&&dW<bdW){bdW=dW;whiteIdx=pi}
+            if(g<minG){minG=g;blackIdx=pi}
+            if(g>maxG){maxG=g;whiteIdx=pi}
           }
           const cells=new Array(w*h);
           for(let y=0;y<h;y++)for(let x=0;x<w;x++){
