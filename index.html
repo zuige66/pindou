@@ -441,12 +441,92 @@
     function dist(a,b){const rm=(a[0]+b[0])/2,dr=a[0]-b[0],dg=a[1]-b[1],db=a[2]-b[2];return (2+rm/256)*dr*dr+4*dg*dg+(2+(255-rm)/256)*db*db}
     function findWhiteIdx(pal){let best=0,bd=Infinity,white=[255,255,255];for(let i=0;i<pal.length;i++){let d=dist(rgb(pal[i][2]),white);if(d<bd){bd=d;best=i}}return best}
     function detectBg(cells,w,h,pal){const N=w*h;const mask=new Uint8Array(N);const q=[];const DIST_TH=35000;for(let x=0;x<w;x++){if(!mask[x]){mask[x]=1;q.push(x)}const b=(h-1)*w+x;if(!mask[b]){mask[b]=1;q.push(b)}}for(let y=0;y<h;y++){const l=y*w;if(!mask[l]){mask[l]=1;q.push(l)}const r=y*w+w-1;if(!mask[r]){mask[r]=1;q.push(r)}}let head=0;while(head<q.length){const cur=q[head++];const cx=cur%w,cy=(cur-cx)/w;const cPi=cells[cur];const cRgb=rgb(pal[cPi][2]);const neigh=[[cx-1,cy],[cx+1,cy],[cx,cy-1],[cx,cy+1]];for(const[nx,ny]of neigh){if(nx<0||nx>=w||ny<0||ny>=h)continue;const ni=ny*w+nx;if(mask[ni])continue;const nPi=cells[ni];if(nPi===cPi){mask[ni]=1;q.push(ni);continue}if(dist(rgb(pal[nPi][2]),cRgb)<=DIST_TH){mask[ni]=1;q.push(ni)}}}return mask}
-    function denoise(cells,w,h,pal,iterations){if(iterations<=0)return cells;const minSize=iterations*2+1;for(let pass=0;pass<Math.max(1,iterations);pass++){const visited=new Uint8Array(w*h);for(let y=0;y<h;y++){for(let x=0;x<w;x++){const idx=y*w+x;if(visited[idx])continue;const pi=cells[idx];const region=[];const stack=[idx];visited[idx]=1;while(stack.length){const c=stack.pop();region.push(c);const cx=c%w,cy=(c-cx)/w;[[cx-1,cy],[cx+1,cy],[cx,cy-1],[cx,cy+1]].forEach(([nx,ny])=>{if(nx<0||nx>=w||ny<0||ny>=h)return;const ni=ny*w+nx;if(!visited[ni]&&cells[ni]===pi){visited[ni]=1;stack.push(ni)}})}if(region.length<minSize){const counts={};region.forEach(ri=>{const cx=ri%w,cy=(ri-cx)/w;[[cx-1,cy],[cx+1,cy],[cx,cy-1],[cx,cy+1]].forEach(([nx,ny])=>{if(nx<0||nx>=w||ny<0||ny>=h)return;const ni=ny*w+nx;if(!region.includes(ni)&&cells[ni]!==pi){counts[cells[ni]]=(counts[cells[ni]]||0)+1}})});let bestPi=pi,bestN=0;for(const[k,v]of Object.entries(counts)){if(v>bestN){bestN=v;bestPi=+k}}if(bestN>0)region.forEach(ri=>cells[ri]=bestPi)}}}}return cells}
+    function denoise(cells,w,h,pal,smooth){
+      const N=w*h;
+      const nx8=[-1,0,1,-1,1,-1,0,1],ny8=[-1,-1,-1,0,0,1,1,1];
+      if(smooth<=0){
+        const out=new Uint8Array(cells);
+        for(let y=0;y<h;y++)for(let x=0;x<w;x++){
+          const idx=y*w+x,cur=cells[idx];let sameCount=0,neighborCounts={};
+          for(let d=0;d<8;d++){const nnx=x+nx8[d],nny=y+ny8[d];
+            if(nnx<0||nnx>=w||nny<0||nny>=h){sameCount++;continue}
+            const ni=nny*w+nnx,np=cells[ni];
+            if(np===cur)sameCount++;
+            else neighborCounts[np]=(neighborCounts[np]||0)+1
+          }
+          if(sameCount<=2){
+            let bestPi=cur,bestN=0;
+            for(const[k,v]of Object.entries(neighborCounts)){if(v>bestN){bestN=v;bestPi=+k}}
+            if(bestN>=3)out[idx]=bestPi;
+          }
+        }
+        for(let i=0;i<N;i++)cells[i]=out[i];return cells;
+      }
+      const label=new Int32Array(N);let regionCount=0;
+      const regions=[];
+      for(let i=0;i<N;i++){
+        if(label[i])continue;
+        regionCount++;const pi=cells[i];
+        const stack=[i];label[i]=regionCount;
+        const cells2=[];
+        while(stack.length){
+          const c=stack.pop();cells2.push(c);
+          const cx=c%w,cy=(c-cx)/w;
+          for(let d=0;d<8;d++){const nnx=cx+nx8[d],nny=cy+ny8[d];
+            if(nnx<0||nnx>=w||nny<0||nny>=h)continue;
+            const ni=nny*w+nnx;
+            if(label[ni])continue;
+            if(cells[ni]===pi){label[ni]=regionCount;stack.push(ni)}
+          }
+        }
+        regions.push({pi,size:cells2.length,cells:cells2});
+      }
+      const regionId=new Int32Array(N);
+      regions.forEach((r,idx)=>{r.cells.forEach(ci=>regionId[ci]=idx)});
+      const sortedRegions=regions.map((r,idx)=>({...r,idx})).sort((a,b)=>b.size-a.size);
+      const threshold=Math.max(2,Math.round(smooth*(smooth+1)*2));
+      const merged=new Uint8Array(N);
+      sortedRegions.forEach(r=>{
+        if(r.size>=threshold){r.cells.forEach(ci=>merged[ci]=r.pi)}
+        else{
+          const counts={};
+          r.cells.forEach(ci=>{
+            const cx=ci%w,cy=(ci-cx)/w;
+            for(let d=0;d<8;d++){const nnx=cx+nx8[d],nny=cy+ny8[d];
+              if(nnx<0||nnx>=w||nny<0||nny>=h)continue;
+              const ni=nny*w+nnx;
+              const nIdx=regionId[ni];
+              if(nIdx!==r.idx&&regions[nIdx].size>=threshold){const k=regions[nIdx].pi;counts[k]=(counts[k]||0)+regions[nIdx].size}
+            }
+          });
+          let bestPi=-1,bestScore=0;
+          for(const[k,v]of Object.entries(counts)){if(v>bestScore){bestScore=v;bestPi=+k}}
+          if(bestPi>=0){r.cells.forEach(ci=>merged[ci]=bestPi)}
+          else{r.cells.forEach(ci=>merged[ci]=r.pi)}
+        }
+      });
+      const out=new Uint8Array(merged);
+      for(let y=0;y<h;y++)for(let x=0;x<w;x++){
+        const idx=y*w+x,cur=merged[idx];let sameCount=0,neighborCounts={};
+        for(let d=0;d<8;d++){const nnx=x+nx8[d],nny=y+ny8[d];
+          if(nnx<0||nnx>=w||nny<0||nny>=h){sameCount++;continue}
+          const ni=nny*w+nnx,np=merged[ni];
+          if(np===cur)sameCount++;
+          else neighborCounts[np]=(neighborCounts[np]||0)+1
+        }
+        if(sameCount<=3){
+          let bestPi=cur,bestN=0;
+          for(const[k,v]of Object.entries(neighborCounts)){if(v>bestN){bestN=v;bestPi=+k}}
+          if(bestN>=4)out[idx]=bestPi;
+        }
+      }
+      for(let i=0;i<N;i++)cells[i]=out[i];return cells;
+    }
     function toast(t){const el=$('#toast');el.textContent=t;el.classList.add('show');setTimeout(()=>el.classList.remove('show'),1800)}
     function readFile(f){if(!f||!f.type.startsWith('image/'))return toast('请选择 JPG、PNG 或 WEBP 图片');const rd=new FileReader;rd.onload=e=>{const im=new Image;im.onload=()=>{img=im;$('#fileInfo').textContent=f.name+' · '+im.width+'×'+im.height;generate()};im.src=e.target.result};rd.readAsDataURL(f)}
     function schedule(){clearTimeout(timer);timer=setTimeout(generate,80)}
     function generate(){if(!img)return;$('#localStatus').textContent='处理中…';setTimeout(()=>{
-      const sourceW=img.naturalWidth||img.width,sourceH=img.naturalHeight||img.height,w=+$(`#gridWidth`).value,h=Math.max(1,Math.round(w*sourceH/sourceW)),tmp=document.createElement('canvas'),tc=tmp.getContext('2d',{willReadFrequently:true});tmp.width=w;tmp.height=h;tc.imageSmoothingEnabled=true;tc.imageSmoothingQuality='high';const smoothVal=+$(`#smooth`).value;if(smoothVal>0){tc.filter=`blur(${smoothVal*0.4}px)`}if($('#mirror').checked){tc.translate(w,0);tc.scale(-1,1)}tc.drawImage(img,0,0,w,h);tc.filter='none';
+      const sourceW=img.naturalWidth||img.width,sourceH=img.naturalHeight||img.height,w=+$(`#gridWidth`).value,h=Math.max(1,Math.round(w*sourceH/sourceW)),tmp=document.createElement('canvas'),tc=tmp.getContext('2d',{willReadFrequently:true});tmp.width=w;tmp.height=h;tc.imageSmoothingEnabled=true;tc.imageSmoothingQuality='high';const smoothVal=+$(`#smooth`).value;const blurAmount=Math.max(0.3,smoothVal*0.25);tc.filter=`blur(${blurAmount}px)`;if($('#mirror').checked){tc.translate(w,0);tc.scale(-1,1)}tc.drawImage(img,0,0,w,h);tc.filter='none';
       let data=tc.getImageData(0,0,w,h).data;let pal=palettes.mard,max=+$(`#maxColors`).value,br=+$(`#bright`).value*2.2,sat=1+(+$(`#sat`).value/100);
       let samples=[];for(let i=0;i<data.length;i+=4){let r=data[i]+br,g=data[i+1]+br,b=data[i+2]+br,gray=.299*r+.587*g+.114*b;r=gray+(r-gray)*sat;g=gray+(g-gray)*sat;b=gray+(b-gray)*sat;samples.push([Math.max(0,Math.min(255,r)),Math.max(0,Math.min(255,g)),Math.max(0,Math.min(255,b))])}
       let usage=pal.map((p,pi)=>[pi,0]);samples.forEach(c=>{let best=0,bd=Infinity;for(let pi=0;pi<pal.length;pi++){let dd=dist(c,rgb(pal[pi][2]));if(dd<bd){bd=dd;best=pi}}usage[best][1]++});usage.sort((a,b)=>b[1]-a[1]);let allowed=usage.filter(x=>x[1]>0).slice(0,Math.min(max,pal.length)).map(x=>x[0]);
