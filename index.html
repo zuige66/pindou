@@ -286,20 +286,7 @@
     function denoise(cells,w,h,pal,smooth){
       const N=w*h;
       const nx8=[-1,0,1,-1,1,-1,0,1],ny8=[-1,-1,-1,0,0,1,1,1];
-      if(smooth<=0){
-        for(let y=0;y<h;y++)for(let x=0;x<w;x++){
-          const i=y*w+x,pi=cells[i];
-          let sameCount=0,diffCount=0,diffIdx=-1;
-          for(let d=0;d<8;d++){
-            const nx=x+nx8[d],ny=y+ny8[d];
-            if(nx<0||nx>=w||ny<0||ny>=h)continue;
-            const ni=ny*w+nx;
-            if(cells[ni]===pi)sameCount++;else{diffCount++;diffIdx=ni}
-          }
-          if(sameCount<=1&&diffCount>=6){cells[i]=cells[diffIdx]}
-        }
-        return;
-      }
+      if(smooth<=0)return;
       const threshold=Math.max(2,Math.round(smooth*smooth*0.8+smooth*1.2));
       const labels=new Int32Array(N);
       const sizes=new Uint32Array(N);
