@@ -286,7 +286,29 @@
     function denoise(cells,w,h,pal,smooth){
       const N=w*h;
       const nx8=[-1,0,1,-1,1,-1,0,1],ny8=[-1,-1,-1,0,0,1,1,1];
-      if(smooth<=0)return;
+      if(smooth<=0){
+        const newCells=cells.slice();
+        for(let y=0;y<h;y++){
+          for(let x=0;x<w;x++){
+            const i=y*w+x;
+            const counts={};
+            let maxCount=0,maxPi=-1;
+            for(let d=0;d<8;d++){
+              const nx=x+nx8[d],ny=y+ny8[d];
+              if(nx<0||nx>=w||ny<0||ny>=h)continue;
+              const ni=ny*w+nx;
+              const pi=cells[ni];
+              counts[pi]=(counts[pi]||0)+1;
+              if(counts[pi]>maxCount){maxCount=counts[pi];maxPi=pi}
+            }
+            if(maxCount>=5&&maxPi!==cells[i]){
+              newCells[i]=maxPi;
+            }
+          }
+        }
+        for(let i=0;i<N;i++)cells[i]=newCells[i];
+        return;
+      }
       const threshold=Math.max(2,Math.round(smooth*smooth*0.8+smooth*1.2));
       const labels=new Int32Array(N);
       const sizes=new Uint32Array(N);
@@ -381,22 +403,11 @@
         const sat=1+(+$(`#sat`).value/100);
         const smooth=+$(`#smooth`).value;
         let samples=[];
-        for(let y=0;y<h;y++){
-          for(let x=0;x<w;x++){
-            let sr=0,sg=0,sb=0,count=0;
-            for(let dy=-1;dy<=1;dy++){
-              for(let dx=-1;dx<=1;dx++){
-                const nx=x+dx,ny=y+dy;
-                if(nx<0||nx>=w||ny<0||ny>=h)continue;
-                const ni=(ny*w+nx)*4;
-                sr+=data[ni];sg+=data[ni+1];sb+=data[ni+2];count++;
-              }
-            }
-            let r=sr/count+br,g=sg/count+br,b=sb/count+br;
-            const gray=.299*r+.587*g+.114*b;
-            r=gray+(r-gray)*sat;g=gray+(g-gray)*sat;b=gray+(b-gray)*sat;
-            samples.push([Math.max(0,Math.min(255,r)),Math.max(0,Math.min(255,g)),Math.max(0,Math.min(255,b))]);
-          }
+        for(let i=0;i<data.length;i+=4){
+          let r=data[i]+br,g=data[i+1]+br,b=data[i+2]+br;
+          const gray=.299*r+.587*g+.114*b;
+          r=gray+(r-gray)*sat;g=gray+(g-gray)*sat;b=gray+(b-gray)*sat;
+          samples.push([Math.max(0,Math.min(255,r)),Math.max(0,Math.min(255,g)),Math.max(0,Math.min(255,b))]);
         }
         let usage=pal.map((p,pi)=>[pi,0]);
         samples.forEach(c=>{
