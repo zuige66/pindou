@@ -188,8 +188,8 @@
             <input id="sat" type="range" min="-40" max="40" value="0">
           </label>
           <label class="row">
-            <span class="row-head"><span>平滑度</span><output id="smoothVal">3</output></span>
-            <input id="smooth" type="range" min="0" max="10" value="3">
+            <span class="row-head"><span>平滑度</span><output id="smoothVal">0</output></span>
+            <input id="smooth" type="range" min="0" max="10" value="0">
           </label>
         </section>
         <section class="section">
@@ -300,6 +300,7 @@
         }
         return;
       }
+      const threshold=Math.max(2,Math.round(smooth*smooth*0.8+smooth*1.2));
       const labels=new Int32Array(N);
       const sizes=new Uint32Array(N);
       let currentLabel=0;
@@ -327,7 +328,6 @@
           sizes[currentLabel]=size;
         }
       }
-      const threshold=Math.max(2,Math.round(smooth*(smooth+1)*2));
       const labelMap=new Int32Array(currentLabel+1);
       for(let l=1;l<=currentLabel;l++){
         if(sizes[l]>=threshold){labelMap[l]=l;continue}
@@ -335,11 +335,13 @@
         let bestNeighbor=-1,bestSize=0;
         const q=[l];
         while(q.length){
-          const cur=q.shift();
-          for(let y=0;y<h;y++)for(let x=0;x<w;x++){
-            if(labels[y*w+x]!==cur)continue;
+          const curLabel=q.shift();
+          const pixelIndices=[];
+          for(let i=0;i<N;i++){if(labels[i]===curLabel)pixelIndices.push(i)}
+          for(const idx of pixelIndices){
+            const px=idx%w,py=(idx-px)/w;
             for(let d=0;d<8;d++){
-              const nx=x+nx8[d],ny=y+ny8[d];
+              const nx=px+nx8[d],ny=py+ny8[d];
               if(nx<0||nx>=w||ny<0||ny>=h)continue;
               const ni=ny*w+nx;
               const nLabel=labels[ni];
@@ -352,27 +354,25 @@
         }
         labelMap[l]=bestNeighbor>0?bestNeighbor:l;
       }
-      const newCells=new Array(N);
-      for(let i=0;i<N;i++)newCells[i]=labelMap[labels[i]]>0&&sizes[labelMap[labels[i]]]<threshold?cells[i]:cells[i];
+      const newCells=cells.slice();
       for(let l=1;l<=currentLabel;l++){
         if(labelMap[l]===l)continue;
         for(let i=0;i<N;i++){
-          if(labels[i]===l)newCells[i]=cells[findMostCommonNeighbor(i,newCells,w,h,pal)];
+          if(labels[i]===l){
+            const x=i%w,y=(i-x)/w;
+            const counts={};
+            for(let d=0;d<8;d++){
+              const nx=x+nx8[d],ny=y+ny8[d];
+              if(nx<0||nx>=w||ny<0||ny>=h)continue;
+              const ni=ny*w+nx;
+              const pi=newCells[ni];
+              counts[pi]=(counts[pi]||0)+1;
+            }
+            let best=0,bestCount=0;
+            for(const pi in counts)if(counts[pi]>bestCount){bestCount=counts[pi];best=+pi}
+            newCells[i]=best;
+          }
         }
-      }
-      function findMostCommonNeighbor(idx,arr,w,h,pal){
-        const x=idx%w,y=(idx-x)/w;
-        const counts={};
-        for(let d=0;d<8;d++){
-          const nx=x+nx8[d],ny=y+ny8[d];
-          if(nx<0||nx>=w||ny<0||ny>=h)continue;
-          const ni=ny*w+nx;
-          const pi=arr[ni];
-          counts[pi]=(counts[pi]||0)+1;
-        }
-        let best=0,bestCount=0;
-        for(const pi in counts)if(counts[pi]>bestCount){bestCount=counts[pi];best=+pi}
-        return best;
       }
       for(let i=0;i<N;i++)cells[i]=newCells[i];
     }
