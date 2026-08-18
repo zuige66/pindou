@@ -976,7 +976,7 @@
     function updateGridPickerState(){
       const gp=$('#collageGridPicker');if(!gp)return;
       const maxGrid=images.length>=9?9:images.length>=6?6:images.length>=4?4:2;
-      gp.querySelectorAll('button').forEach(b=>{
+      $$('#collageGridPicker button').forEach(b=>{
         const g=+b.dataset.grid;
         const disabled=g>maxGrid;
         b.disabled=disabled;
