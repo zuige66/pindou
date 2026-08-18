@@ -308,7 +308,7 @@
     </div>
     <div class="collage-canvas-wrap">
       <canvas id="collageCanvas"></canvas>
-      <div class="collage-hint" id="collageHint">拖拽图片可以换位</div>
+      <div class="collage-hint" id="collageHint">拖拽或点击图片可换位 · 间隙滑块调整间距</div>
     </div>
     <div class="collage-tray" id="collageTray"></div>
   </div>
@@ -863,7 +863,7 @@
       toast(`已替换 ${replaced} 颗 ${oldCode} → ${newCode}`);
     }
     // ===== Collage Mode =====
-    let collage={grid:2,gap:0,order:[],dragFrom:null};
+    let collage={grid:2,gap:0,order:[],dragFrom:null,selectedCell:-1};
     const collageCanvas=$('#collageCanvas'),cctx=collageCanvas.getContext('2d');
     function makePatternCanvas(idx,maxCell=30){
       const im=images[idx];if(!im||!im.result)return null;
@@ -932,6 +932,7 @@
         b.style.display=g<=maxGrid?'':'none';
       });
       $('#collagePage').hidden=false;
+      collage.selectedCell=-1;
       refreshCollageCanvases();
       renderCollageTray();
       renderCollage();
@@ -974,6 +975,19 @@
           cctx.fillRect(sx,sy,cell,cell);
         }
       }
+      if(collage.selectedCell>=0){
+        const [rows,cols]=getGridDim(collage.grid);
+        const gap=collage.gap;
+        const cellW=(collageCanvas.width-gap*(cols-1))/cols;
+        const cellH=(collageCanvas.height-gap*(rows-1))/rows;
+        const c=collage.selectedCell%cols,r=Math.floor(collage.selectedCell/cols);
+        const sx=c*(cellW+gap)+2,sy=r*(cellH+gap)+2;
+        cctx.save();
+        cctx.strokeStyle='#6750a4';cctx.lineWidth=3;
+        cctx.strokeRect(sx,sy,cellW-4,cellH-4);
+        cctx.restore();
+      }
+      drawHoverHighlight();
     }
     function renderCollageTray(){
       const tray=$('#collageTray');
@@ -1021,20 +1035,72 @@
         renderCollageTray();renderCollage();
       });
     }
-    collageCanvas.addEventListener('dragover',e=>{e.preventDefault();e.dataTransfer.dropEffect='move'});
-    collageCanvas.addEventListener('drop',e=>{
-      e.preventDefault();
-      if(collage.dragFrom===null)return;
+    let collageHover={cell:-1};
+    function drawHoverHighlight(){
+      if(collageHover.cell<0)return;
+      const [rows,cols]=getGridDim(collage.grid);
+      const gap=collage.gap;
+      const cellW=(collageCanvas.width-gap*(cols-1))/cols;
+      const cellH=(collageCanvas.height-gap*(rows-1))/rows;
+      const c=collageHover.cell%cols,r=Math.floor(collageHover.cell/cols);
+      const sx=c*(cellW+gap)+2,sy=r*(cellH+gap)+2;
+      const sW=cellW-4,sH=cellH-4;
+      cctx.save();
+      cctx.strokeStyle='rgba(103,80,164,.85)';
+      cctx.lineWidth=3;
+      cctx.setLineDash([6,4]);
+      cctx.strokeRect(sx,sy,sW,sH);
+      cctx.restore();
+    }
+    function hitTestCell(clientX,clientY){
       const rect=collageCanvas.getBoundingClientRect();
-      const x=(e.clientX-rect.left)*(collageCanvas.width/rect.width);
-      const y=(e.clientY-rect.top)*(collageCanvas.height/rect.height);
+      const x=(clientX-rect.left)*(collageCanvas.width/rect.width);
+      const y=(clientY-rect.top)*(collageCanvas.height/rect.height);
       const [rows,cols]=getGridDim(collage.grid);
       const gap=collage.gap;
       const cellW=(collageCanvas.width-gap*(cols-1))/cols;
       const cellH=(collageCanvas.height-gap*(rows-1))/rows;
       const c=Math.floor(x/(cellW+gap));
       const r=Math.floor(y/(cellH+gap));
-      const toIdx=Math.max(0,Math.min(collage.order.length-1,r*cols+c));
+      if(c<0||c>=cols||r<0||r>=rows)return-1;
+      return r*cols+c;
+    }
+    collageCanvas.addEventListener('mousemove',e=>{
+      if(collage.dragFrom===null&&collage.selectedCell<0){collageHover.cell=-1;return}
+      const cell=hitTestCell(e.clientX,e.clientY);
+      if(cell!==collageHover.cell){collageHover.cell=cell;renderCollage()}
+    });
+    collageCanvas.addEventListener('mouseleave',()=>{collageHover.cell=-1;renderCollage()});
+    collageCanvas.addEventListener('dragover',e=>{
+      e.preventDefault();e.dataTransfer.dropEffect='move';
+      const cell=hitTestCell(e.clientX,e.clientY);
+      if(cell!==collageHover.cell){collageHover.cell=cell;renderCollage()}
+    });
+    collageCanvas.addEventListener('click',e=>{
+      const cell=hitTestCell(e.clientX,e.clientY);
+      if(cell<0)return;
+      if(collage.selectedCell<0){collage.selectedCell=cell;renderCollage();return}
+      if(collage.selectedCell===cell){collage.selectedCell=-1;renderCollage();return}
+      const a=collage.selectedCell,b=cell;
+      const ai=collage.order[a],bi=collage.order[b];
+      if(ai!==undefined&&bi!==undefined){
+        collage.order[a]=bi;collage.order[b]=ai;
+      }else{
+        const items=collage.order.slice();
+        const fromIdx=Math.min(a,b);const toIdx=Math.max(a,b);
+        const [moved]=items.splice(fromIdx,1);
+        items.splice(toIdx,0,moved);
+        collage.order=items;
+      }
+      collage.selectedCell=-1;
+      renderCollageTray();renderCollage();
+    });
+    collageCanvas.addEventListener('drop',e=>{
+      e.preventDefault();
+      const cell=hitTestCell(e.clientX,e.clientY);
+      collageHover.cell=-1;
+      if(collage.dragFrom===null)return;
+      const toIdx=Math.max(0,Math.min(collage.order.length-1,cell));
       const fi=collage.order.indexOf(collage.dragFrom);
       if(fi<0){collage.dragFrom=null;return}
       const items=collage.order.slice();
