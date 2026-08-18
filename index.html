@@ -1188,7 +1188,40 @@
     };
     $('#collageDownload').onclick=()=>{
       if(collage.order.length===0)return toast('没有图片可下载');
-      collageCanvas.toBlob(blob=>{
+      const imgs=collage.order.map(i=>images[i]).filter(Boolean);
+      const [rows,cols]=getGridDim(collage.grid);
+      const gap=collage.gap;
+      const scale=2;
+      const cellSize=280;
+      const w=cellSize*cols+gap*(cols-1);
+      const h=cellSize*rows+gap*(rows-1);
+      const dl=document.createElement('canvas');
+      dl.width=w*scale;dl.height=h*scale;
+      const dc=dl.getContext('2d');
+      dc.scale(scale,scale);
+      dc.fillStyle='#fff';
+      dc.fillRect(0,0,w,h);
+      for(let i=0;i<rows*cols;i++){
+        const r=Math.floor(i/cols),c=i%cols;
+        const sx=c*(cellSize+gap),sy=r*(cellSize+gap);
+        const im=imgs[i];
+        const pad=Math.max(1,gap>=8?4:0);
+        if(im){
+          const src=im.canvas||im.img;
+          const sw=src.width||src.naturalWidth;
+          const sh=src.height||src.naturalHeight;
+          const s=Math.max((cellSize-pad*2)/sw,(cellSize-pad*2)/sh);
+          const dw=sw*s,dh=sh*s;
+          const dx=sx+(cellSize-dw)/2,dy=sy+(cellSize-dh)/2;
+          dc.fillStyle='#fff';
+          dc.fillRect(sx+pad,sy+pad,cellSize-pad*2,cellSize-pad*2);
+          dc.drawImage(src,dx,dy,dw,dh);
+        }else{
+          dc.fillStyle='#e8e8e8';
+          dc.fillRect(sx,sy,cellSize,cellSize);
+        }
+      }
+      dl.toBlob(blob=>{
         const a=document.createElement('a');
         a.href=URL.createObjectURL(blob);
         const ts=new Date().toISOString().slice(0,19).replace(/[:T]/g,'-');
