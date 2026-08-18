@@ -396,6 +396,11 @@
     }
     function removeImage(idx){
       images.splice(idx,1);
+      collage.order=collage.order
+        .filter(i=>i!==idx)
+        .map(i=>i>idx?i-1:i);
+      if(collage.order.length===0)collage.grid=2;
+      if(images.length<2){$('#collageFab').hidden=true;$('#collagePage').hidden=true}
       if(images.length===0){
         currentIdx=-1;img=null;result=null;
         canvas.hidden=true;$('#empty').hidden=false;
@@ -410,6 +415,7 @@
       if(idx<currentIdx)currentIdx--;
       else if(idx===currentIdx){if(currentIdx>=images.length)currentIdx=images.length-1}
       selectImage(currentIdx);
+      if(!$('#collagePage').hidden){renderCollageTray();renderCollage()}
     }
     function schedule(){clearTimeout(timer);timer=setTimeout(()=>{
       if(currentIdx>=0)generate();
