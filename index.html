@@ -873,7 +873,8 @@
     }
     // ===== Collage Mode =====
     let collage={grid:2,gap:0,order:[],dragFrom:null,selectedCell:-1};
-    const collageCanvas=$('#collageCanvas'),cctx=collageCanvas.getContext('2d');
+    const collageCanvas=$('#collageCanvas');
+    const cctx=collageCanvas?collageCanvas.getContext('2d'):null;
     function makePatternCanvas(idx){
       const im=images[idx];if(!im||!im.result)return null;
       const{w,h,cells,pal}=im.result;
@@ -944,9 +945,9 @@
       });
       $('#collagePage').hidden=false;
       collage.selectedCell=-1;
-      refreshCollageCanvases();
-      renderCollageTray();
-      renderCollage();
+      try{refreshCollageCanvases()}catch(e){console.warn('刷新canvas出错:',e)}
+      try{renderCollageTray()}catch(e){console.warn('渲染托盘出错:',e)}
+      try{renderCollage()}catch(e){console.warn('渲染拼图出错:',e)}
       const needGen=images.map((im,i)=>({im,i})).filter(x=>!x.im.result);
       if(needGen.length>0){
         showCollageNotice(`${needGen.length} 张图片尚未生成拼豆图纸`,true);
@@ -1000,6 +1001,7 @@
     function closeCollage(){$('#collagePage').hidden=true}
     function getGridDim(n){if(n<=2)return[1,2];if(n<=4)return[2,2];if(n<=6)return[2,3];return[3,3]}
     function renderCollage(){
+      if(!collageCanvas||!cctx)return;
       const imgs=collage.order.map(i=>images[i]).filter(Boolean);
       if(imgs.length===0)return;
       const [rows,cols]=getGridDim(collage.grid);
@@ -1024,12 +1026,14 @@
           const src=im.canvas||im.img;
           const sw=src.width||src.naturalWidth;
           const sh=src.height||src.naturalHeight;
-          const scale=Math.max((cell-pad*2)/sw,(cell-pad*2)/sh);
-          const dw=sw*scale,dh=sh*scale;
-          const dx=sx+(cell-dw)/2,dy=sy+(cell-dh)/2;
-          cctx.fillStyle='#fff';
-          cctx.fillRect(sx+pad,sy+pad,cell-pad*2,cell-pad*2);
-          cctx.drawImage(src,dx,dy,dw,dh);
+          if(sw>0&&sh>0){
+            const scale=Math.max((cell-pad*2)/sw,(cell-pad*2)/sh);
+            const dw=sw*scale,dh=sh*scale;
+            const dx=sx+(cell-dw)/2,dy=sy+(cell-dh)/2;
+            cctx.fillStyle='#fff';
+            cctx.fillRect(sx+pad,sy+pad,cell-pad*2,cell-pad*2);
+            cctx.drawImage(src,dx,dy,dw,dh);
+          }
         }else{
           cctx.fillStyle='#e8e8e8';
           cctx.fillRect(sx,sy,cell,cell);
@@ -1053,8 +1057,11 @@
       const tray=$('#collageTray');
       tray.innerHTML=collage.order.map(i=>{
         const im=images[i];if(!im)return'';
-        const src=im.canvas||im.img;
-        const srcUrl=im.canvas?im.canvas.toDataURL():im.img.src;
+        let srcUrl='';
+        try{
+          if(im.canvas)srcUrl=im.canvas.toDataURL();
+          else srcUrl=im.img.src;
+        }catch(e){srcUrl=im.img.src}
         return `<div class="collage-slot" data-order="${i}" draggable="true"><img src="${srcUrl}"><span class="slot-del" data-del="${i}">×</span><span class="slot-label">${i+1}</span></div>`;
       }).join('');
       [...tray.querySelectorAll('.collage-slot')].forEach(el=>{
@@ -1097,7 +1104,7 @@
     }
     let collageHover={cell:-1};
     function drawHoverHighlight(){
-      if(collageHover.cell<0)return;
+      if(collageHover.cell<0||!collageCanvas||!cctx)return;
       const [rows,cols]=getGridDim(collage.grid);
       const gap=collage.gap;
       const cellW=(collageCanvas.width-gap*(cols-1))/cols;
@@ -1125,53 +1132,55 @@
       if(c<0||c>=cols||r<0||r>=rows)return-1;
       return r*cols+c;
     }
-    collageCanvas.addEventListener('mousemove',e=>{
-      if(collage.dragFrom===null&&collage.selectedCell<0){collageHover.cell=-1;return}
-      const cell=hitTestCell(e.clientX,e.clientY);
-      if(cell!==collageHover.cell){collageHover.cell=cell;renderCollage()}
-    });
-    collageCanvas.addEventListener('mouseleave',()=>{collageHover.cell=-1;renderCollage()});
-    collageCanvas.addEventListener('dragover',e=>{
-      e.preventDefault();e.dataTransfer.dropEffect='move';
-      const cell=hitTestCell(e.clientX,e.clientY);
-      if(cell!==collageHover.cell){collageHover.cell=cell;renderCollage()}
-    });
-    collageCanvas.addEventListener('click',e=>{
-      const cell=hitTestCell(e.clientX,e.clientY);
-      if(cell<0)return;
-      if(collage.selectedCell<0){collage.selectedCell=cell;renderCollage();return}
-      if(collage.selectedCell===cell){collage.selectedCell=-1;renderCollage();return}
-      const a=collage.selectedCell,b=cell;
-      const ai=collage.order[a],bi=collage.order[b];
-      if(ai!==undefined&&bi!==undefined){
-        collage.order[a]=bi;collage.order[b]=ai;
-      }else{
+    if(collageCanvas){
+      collageCanvas.addEventListener('mousemove',e=>{
+        if(collage.dragFrom===null&&collage.selectedCell<0){collageHover.cell=-1;return}
+        const cell=hitTestCell(e.clientX,e.clientY);
+        if(cell!==collageHover.cell){collageHover.cell=cell;renderCollage()}
+      });
+      collageCanvas.addEventListener('mouseleave',()=>{collageHover.cell=-1;renderCollage()});
+      collageCanvas.addEventListener('dragover',e=>{
+        e.preventDefault();e.dataTransfer.dropEffect='move';
+        const cell=hitTestCell(e.clientX,e.clientY);
+        if(cell!==collageHover.cell){collageHover.cell=cell;renderCollage()}
+      });
+      collageCanvas.addEventListener('click',e=>{
+        const cell=hitTestCell(e.clientX,e.clientY);
+        if(cell<0)return;
+        if(collage.selectedCell<0){collage.selectedCell=cell;renderCollage();return}
+        if(collage.selectedCell===cell){collage.selectedCell=-1;renderCollage();return}
+        const a=collage.selectedCell,b=cell;
+        const ai=collage.order[a],bi=collage.order[b];
+        if(ai!==undefined&&bi!==undefined){
+          collage.order[a]=bi;collage.order[b]=ai;
+        }else{
+          const items=collage.order.slice();
+          const fromIdx=Math.min(a,b);const toIdx=Math.max(a,b);
+          const [moved]=items.splice(fromIdx,1);
+          items.splice(toIdx,0,moved);
+          collage.order=items;
+        }
+        collage.selectedCell=-1;
+        renderCollageTray();renderCollage();
+      });
+      collageCanvas.addEventListener('drop',e=>{
+        e.preventDefault();
+        const cell=hitTestCell(e.clientX,e.clientY);
+        collageHover.cell=-1;
+        if(collage.dragFrom===null)return;
+        const toIdx=Math.max(0,Math.min(collage.order.length-1,cell));
+        const fi=collage.order.indexOf(collage.dragFrom);
+        if(fi<0){collage.dragFrom=null;return}
         const items=collage.order.slice();
-        const fromIdx=Math.min(a,b);const toIdx=Math.max(a,b);
-        const [moved]=items.splice(fromIdx,1);
-        items.splice(toIdx,0,moved);
+        items.splice(fi,1);
+        let insertAt=Math.min(toIdx,items.length);
+        if(fi<toIdx)insertAt=Math.max(0,Math.min(items.length,toIdx-1));
+        items.splice(insertAt,0,collage.dragFrom);
         collage.order=items;
-      }
-      collage.selectedCell=-1;
-      renderCollageTray();renderCollage();
-    });
-    collageCanvas.addEventListener('drop',e=>{
-      e.preventDefault();
-      const cell=hitTestCell(e.clientX,e.clientY);
-      collageHover.cell=-1;
-      if(collage.dragFrom===null)return;
-      const toIdx=Math.max(0,Math.min(collage.order.length-1,cell));
-      const fi=collage.order.indexOf(collage.dragFrom);
-      if(fi<0){collage.dragFrom=null;return}
-      const items=collage.order.slice();
-      items.splice(fi,1);
-      let insertAt=Math.min(toIdx,items.length);
-      if(fi<toIdx)insertAt=Math.max(0,Math.min(items.length,toIdx-1));
-      items.splice(insertAt,0,collage.dragFrom);
-      collage.order=items;
-      renderCollageTray();renderCollage();
-      collage.dragFrom=null;
-    });
+        renderCollageTray();renderCollage();
+        collage.dragFrom=null;
+      });
+    }
     $('#collageFab').onclick=openCollage;
     $('#collageBack').onclick=closeCollage;
     $('#collageGridPicker').onclick=e=>{
