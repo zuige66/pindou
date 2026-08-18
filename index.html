@@ -284,7 +284,7 @@
           <span id="localStatus">✓ 图片不会离开此设备</span>
         </div>
         <div class="thumb-strip" id="thumbStrip" hidden></div>
-        <button class="collage-fab" id="collageFab" hidden onclick="console.log('去拼图按钮被点击');if(typeof openCollage==='function')openCollage();else alert('openCollage未定义')">
+        <button class="collage-fab" id="collageFab" hidden onclick="openCollage()">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
           <span>去拼图</span>
         </button>
@@ -934,9 +934,14 @@
       images.forEach((im,i)=>{if(im.result)im.canvas=makePatternCanvas(i)});
     }
     function openCollage(){
-      console.log('openCollage called, images.length:',images.length);
       if(images.length<2)return toast('至少需要2张图片才能拼图');
-      try{
+      const page=$('#collagePage');
+      if(!page){alert('拼图页面元素不存在');return}
+      page.removeAttribute('hidden');
+      page.style.display='flex';
+      page.style.position='fixed';
+      page.style.inset='0';
+      page.style.zIndex='100';
       const maxGrid=images.length>=9?9:images.length>=6?6:images.length>=4?4:2;
       collage.grid=Math.min(collage.grid||maxGrid,maxGrid);
       collage.order=images.map((_,i)=>i);
@@ -948,19 +953,18 @@
           b.style.display=g<=maxGrid?'':'none';
         });
       }
-      $('#collagePage').hidden=false;
-      console.log('collagePage shown, hidden:',$('#collagePage').hidden);
       collage.selectedCell=-1;
-      try{refreshCollageCanvases()}catch(e){console.warn('刷新canvas出错:',e)}
-      try{renderCollageTray()}catch(e){console.warn('渲染托盘出错:',e)}
-      try{renderCollage()}catch(e){console.warn('渲染拼图出错:',e)}
-      const needGen=images.map((im,i)=>({im,i})).filter(x=>!x.im.result);
-      if(needGen.length>0){
-        showCollageNotice(`${needGen.length} 张图片尚未生成拼豆图纸`,true);
-      }else{
-        hideCollageNotice();
-      }
-      }catch(e){console.error('openCollage错误:',e);alert('打开拼图页面出错: '+e.message)}
+      setTimeout(()=>{
+        try{refreshCollageCanvases()}catch(e){console.warn(e)}
+        try{renderCollageTray()}catch(e){console.warn(e)}
+        try{renderCollage()}catch(e){console.warn(e)}
+        const needGen=images.map((im,i)=>({im,i})).filter(x=>!x.im.result);
+        if(needGen.length>0){
+          showCollageNotice(`${needGen.length} 张图片尚未生成拼豆图纸`,true);
+        }else{
+          hideCollageNotice();
+        }
+      },50);
     }
     let collageNoticeTimer=null;
     function showCollageNotice(msg,withGen){
@@ -1005,7 +1009,15 @@
       result=images[idx].result;
       generate(true);
     }
-    function closeCollage(){$('#collagePage').hidden=true}
+    function closeCollage(){
+      const page=$('#collagePage');
+      if(!page)return;
+      page.setAttribute('hidden','');
+      page.style.display='';
+      page.style.position='';
+      page.style.inset='';
+      page.style.zIndex='';
+    }
     function getGridDim(n){if(n<=2)return[1,2];if(n<=4)return[2,2];if(n<=6)return[2,3];return[3,3]}
     function renderCollage(){
       if(!collageCanvas||!cctx)return;
