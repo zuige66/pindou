@@ -420,7 +420,7 @@
       if(!$('#collagePage').hidden){
         updateGridPickerState();
         const maxGrid=images.length>=9?9:images.length>=6?6:images.length>=4?4:2;
-        if(collage.grid>maxGrid){collage.grid=maxGrid;$('#collageGridPicker button').forEach(b=>b.classList.toggle('active',+b.dataset.grid===collage.grid))}
+        if(collage.grid>maxGrid){collage.grid=maxGrid;$$('#collageGridPicker button').forEach(b=>b.classList.toggle('active',+b.dataset.grid===collage.grid))}
         renderCollageTray();renderCollage();
       }
     }
@@ -1136,11 +1136,8 @@
         if(pos>=0){collage.order.splice(pos,1)}
         const maxGrid=images.length>=9?9:images.length>=6?6:images.length>=4?4:2;
         if(collage.grid>maxGrid)collage.grid=maxGrid;
-        $('#collageGridPicker button').forEach(b=>{
-          const g=+b.dataset.grid;
-          b.classList.toggle('active',g===collage.grid);
-          b.style.display=g<=maxGrid?'':'none';
-        });
+        updateGridPickerState();
+        $$('#collageGridPicker button').forEach(b=>b.classList.toggle('active',+b.dataset.grid===collage.grid));
         renderCollageTray();renderCollage();
       });
     }
@@ -1230,7 +1227,7 @@
       const g=+btn.dataset.grid;
       const maxGrid=images.length>=9?9:images.length>=6?6:images.length>=4?4:2;
       if(g>maxGrid){toast(`至少需要${g}张图片才能使用${g}宫格`);return}
-      $('#collageGridPicker button').forEach(b=>b.classList.remove('active'));
+      $$('#collageGridPicker button').forEach(b=>b.classList.remove('active'));
       btn.classList.add('active');
       collage.grid=g;
       renderCollage();
