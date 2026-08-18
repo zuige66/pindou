@@ -101,7 +101,7 @@
     .collage-fab{position:fixed;right:24px;bottom:24px;z-index:50;display:flex;align-items:center;gap:6px;background:var(--md-primary);color:var(--md-on-primary);border:none;border-radius:999px;padding:14px 20px;gap:8px;font-size:14px;font-weight:600;cursor:pointer;box-shadow:0 8px 24px rgba(0,0,0,.18);transition:.2s}
     .collage-fab:hover{transform:translateY(-2px);box-shadow:0 12px 32px rgba(0,0,0,.24)}
     .collage-fab svg{width:20px;height:20px}
-    .collage-page{position:fixed;inset:0;z-index:100;background:var(--md-background);display:flex;flex-direction:column}
+    .collage-page{position:fixed;inset:0;z-index:100;background:var(--md-surface);display:flex;flex-direction:column}
     .collage-header{display:flex;align-items:center;gap:16px;padding:14px 24px;background:var(--md-surface);border-bottom:1px solid var(--md-outline-variant)}
     .collage-header strong{font-size:16px;font-weight:600}
     .collage-back{border:none;background:transparent;color:var(--md-primary);font-size:14px;font-weight:600;cursor:pointer;padding:8px 12px;border-radius:8px}
@@ -284,7 +284,7 @@
           <span id="localStatus">✓ 图片不会离开此设备</span>
         </div>
         <div class="thumb-strip" id="thumbStrip" hidden></div>
-        <button class="collage-fab" id="collageFab" hidden>
+        <button class="collage-fab" id="collageFab" hidden onclick="console.log('去拼图按钮被点击');if(typeof openCollage==='function')openCollage();else alert('openCollage未定义')">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
           <span>去拼图</span>
         </button>
@@ -934,16 +934,22 @@
       images.forEach((im,i)=>{if(im.result)im.canvas=makePatternCanvas(i)});
     }
     function openCollage(){
+      console.log('openCollage called, images.length:',images.length);
       if(images.length<2)return toast('至少需要2张图片才能拼图');
+      try{
       const maxGrid=images.length>=9?9:images.length>=6?6:images.length>=4?4:2;
       collage.grid=Math.min(collage.grid||maxGrid,maxGrid);
       collage.order=images.map((_,i)=>i);
-      $('#collageGridPicker button').forEach(b=>{
-        const g=+b.dataset.grid;
-        b.classList.toggle('active',g===collage.grid);
-        b.style.display=g<=maxGrid?'':'none';
-      });
+      const gp=$('#collageGridPicker');
+      if(gp){
+        gp.querySelectorAll('button').forEach(b=>{
+          const g=+b.dataset.grid;
+          b.classList.toggle('active',g===collage.grid);
+          b.style.display=g<=maxGrid?'':'none';
+        });
+      }
       $('#collagePage').hidden=false;
+      console.log('collagePage shown, hidden:',$('#collagePage').hidden);
       collage.selectedCell=-1;
       try{refreshCollageCanvases()}catch(e){console.warn('刷新canvas出错:',e)}
       try{renderCollageTray()}catch(e){console.warn('渲染托盘出错:',e)}
@@ -954,6 +960,7 @@
       }else{
         hideCollageNotice();
       }
+      }catch(e){console.error('openCollage错误:',e);alert('打开拼图页面出错: '+e.message)}
     }
     let collageNoticeTimer=null;
     function showCollageNotice(msg,withGen){
