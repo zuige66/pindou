@@ -117,7 +117,7 @@
     .collage-download{border:none;background:var(--md-primary);color:var(--md-on-primary);border-radius:999px;padding:9px 20px;font-size:13px;font-weight:600;cursor:pointer;transition:.15s}
     .collage-download:hover{filter:brightness(1.08)}
     .collage-canvas-wrap{flex:1;display:flex;align-items:center;justify-content:center;padding:24px;overflow:auto;background:var(--md-surface-container-lowest)}
-    .collage-canvas-wrap canvas{max-width:100%;max-height:100%;border-radius:16px;box-shadow:var(--md-shadow-2);cursor:default}
+    .collage-canvas-wrap canvas{border-radius:16px;box-shadow:var(--md-shadow-2);cursor:default}
     .collage-canvas-wrap canvas.dragging{cursor:grabbing}
     .collage-hint{position:absolute;bottom:32px;left:50%;transform:translateX(-50%);font-size:12px;color:var(--md-on-surface-variant);background:var(--md-surface-container);padding:6px 14px;border-radius:999px;pointer-events:none;opacity:.85}
     .collage-tray{display:flex;gap:10px;padding:12px 24px;background:var(--md-surface);border-top:1px solid var(--md-outline-variant);overflow-x:auto;flex-shrink:0}
@@ -394,6 +394,7 @@
       strip.innerHTML=images.map((it,i)=>`<div class="thumb${i===currentIdx?' active':''}" data-idx="${i}"><span class="thumb-num">${i+1}</span><img src="${it.img.src}" alt="${it.name}"><button class="thumb-del" data-del="${i}" title="移除">×</button></div>`).join('');
       [...strip.querySelectorAll('.thumb')].forEach(el=>el.onclick=e=>{if(e.target.dataset.del!==undefined)return;selectImage(+el.dataset.idx)});
       [...strip.querySelectorAll('.thumb-del')].forEach(el=>el.onclick=e=>{e.stopPropagation();removeImage(+el.dataset.del)});
+      if(!$('#collagePage').hidden)updateGridPickerState();
     }
     function removeImage(idx){
       images.splice(idx,1);
@@ -416,7 +417,12 @@
       if(idx<currentIdx)currentIdx--;
       else if(idx===currentIdx){if(currentIdx>=images.length)currentIdx=images.length-1}
       selectImage(currentIdx);
-      if(!$('#collagePage').hidden){renderCollageTray();renderCollage()}
+      if(!$('#collagePage').hidden){
+        updateGridPickerState();
+        const maxGrid=images.length>=9?9:images.length>=6?6:images.length>=4?4:2;
+        if(collage.grid>maxGrid){collage.grid=maxGrid;$('#collageGridPicker button').forEach(b=>b.classList.toggle('active',+b.dataset.grid===collage.grid))}
+        renderCollageTray();renderCollage();
+      }
     }
     function schedule(){clearTimeout(timer);timer=setTimeout(()=>{
       if(currentIdx>=0)generate();
@@ -875,6 +881,7 @@
     let collage={grid:2,gap:0,order:[],dragFrom:null,selectedCell:-1};
     const collageCanvas=$('#collageCanvas');
     const cctx=collageCanvas?collageCanvas.getContext('2d'):null;
+    let collageLogicalW=0,collageLogicalH=0;
     function makePatternCanvas(idx){
       const im=images[idx];if(!im||!im.result)return null;
       const{w,h,cells,pal}=im.result;
@@ -882,19 +889,19 @@
       const showGrid=$('#showGrid').checked;
       const showBoard=$('#boardLines').checked;
       const showAxis=$('#showAxis').checked;
-      const maxCanvasW=400;
-      const cell=Math.max(2,Math.floor(maxCanvasW/w));
-      const axis=showAxis?Math.max(12,Math.round(cell*.92)):0;
+      const maxCanvasW=800;
+      const cell=Math.max(4,Math.floor(maxCanvasW/w));
+      const axis=showAxis?Math.max(16,Math.round(cell*.92)):0;
       const useCodes=showCodes&&cell>=22;
       const pw=w*cell+axis*2;
       const ph=h*cell+axis*2;
-      if(pw>4000||ph>4000)return null;
+      if(pw>8000||ph>8000)return null;
       const cv=document.createElement('canvas');
       cv.width=pw;cv.height=ph;
       const cx=cv.getContext('2d');
       cx.fillStyle='#fff';cx.fillRect(0,0,pw,ph);
       cx.textAlign='center';cx.textBaseline='middle';
-      cx.font=`700 ${Math.max(8,cell*.32)}px monospace`;
+      cx.font=`700 ${Math.max(10,cell*.32)}px monospace`;
       cells.forEach((pi,i)=>{
         const p=pal[pi],rgbv=rgb(p[2]);
         const x=i%w,y=Math.floor(i/w);
@@ -918,7 +925,7 @@
         for(let y=0;y<=h;y+=5){cx.lineWidth=y%10===0?2.2:1.2;cx.beginPath();cx.moveTo(axis,axis+y*cell+.5);cx.lineTo(axis+w*cell,axis+y*cell+.5);cx.stroke()}
       }
       if(showAxis){
-        cx.fillStyle='#757575';cx.font=`600 ${Math.max(9,cell*.35)}px sans-serif`;
+        cx.fillStyle='#757575';cx.font=`600 ${Math.max(11,cell*.35)}px sans-serif`;
         cx.textAlign='center';cx.textBaseline='middle';
         for(let x=0;x<w;x++){cx.fillText(String(x+1),axis+x*cell+cell/2,axis/2)}
         cx.textAlign='right';cx.textBaseline='middle';
@@ -950,9 +957,9 @@
         gp.querySelectorAll('button').forEach(b=>{
           const g=+b.dataset.grid;
           b.classList.toggle('active',g===collage.grid);
-          b.style.display=g<=maxGrid?'':'none';
         });
       }
+      updateGridPickerState();
       collage.selectedCell=-1;
       setTimeout(()=>{
         try{refreshCollageCanvases()}catch(e){console.warn(e)}
@@ -965,6 +972,18 @@
           hideCollageNotice();
         }
       },50);
+    }
+    function updateGridPickerState(){
+      const gp=$('#collageGridPicker');if(!gp)return;
+      const maxGrid=images.length>=9?9:images.length>=6?6:images.length>=4?4:2;
+      gp.querySelectorAll('button').forEach(b=>{
+        const g=+b.dataset.grid;
+        const disabled=g>maxGrid;
+        b.disabled=disabled;
+        b.style.opacity=disabled?'0.5':'';
+        b.style.cursor=disabled?'not-allowed':'';
+        b.title=disabled?`需要至少${g}张图片才能使用${g}宫格`:'';
+      });
     }
     let collageNoticeTimer=null;
     function showCollageNotice(msg,withGen){
@@ -1025,6 +1044,7 @@
       if(imgs.length===0)return;
       const [rows,cols]=getGridDim(collage.grid);
       const gap=collage.gap;
+      const dpr=window.devicePixelRatio||1;
       const maxW=Math.min(window.innerWidth-80,960);
       const maxH=window.innerHeight-340;
       const cellW=Math.floor((maxW-gap*(cols-1))/cols);
@@ -1032,8 +1052,13 @@
       const cell=Math.max(40,Math.min(cellW,cellH));
       const w=cell*cols+gap*(cols-1);
       const h=cell*rows+gap*(rows-1);
-      collageCanvas.width=w;
-      collageCanvas.height=h;
+      collageLogicalW=w;collageLogicalH=h;
+      collageCanvas.width=Math.round(w*dpr);
+      collageCanvas.height=Math.round(h*dpr);
+      collageCanvas.style.width=w+'px';
+      collageCanvas.style.height=h+'px';
+      cctx.setTransform(1,0,0,1,0,0);
+      cctx.scale(dpr,dpr);
       cctx.fillStyle='#f5f5f5';
       cctx.fillRect(0,0,w,h);
       for(let i=0;i<rows*cols;i++){
@@ -1059,11 +1084,9 @@
         }
       }
       if(collage.selectedCell>=0){
-        const [rows,cols]=getGridDim(collage.grid);
-        const gap=collage.gap;
-        const cellW=(collageCanvas.width-gap*(cols-1))/cols;
-        const cellH=(collageCanvas.height-gap*(rows-1))/rows;
         const c=collage.selectedCell%cols,r=Math.floor(collage.selectedCell/cols);
+        const cellW=(w-gap*(cols-1))/cols;
+        const cellH=(h-gap*(rows-1))/rows;
         const sx=c*(cellW+gap)+2,sy=r*(cellH+gap)+2;
         cctx.save();
         cctx.strokeStyle='#6750a4';cctx.lineWidth=3;
@@ -1126,8 +1149,8 @@
       if(collageHover.cell<0||!collageCanvas||!cctx)return;
       const [rows,cols]=getGridDim(collage.grid);
       const gap=collage.gap;
-      const cellW=(collageCanvas.width-gap*(cols-1))/cols;
-      const cellH=(collageCanvas.height-gap*(rows-1))/rows;
+      const cellW=(collageLogicalW-gap*(cols-1))/cols;
+      const cellH=(collageLogicalH-gap*(rows-1))/rows;
       const c=collageHover.cell%cols,r=Math.floor(collageHover.cell/cols);
       const sx=c*(cellW+gap)+2,sy=r*(cellH+gap)+2;
       const sW=cellW-4,sH=cellH-4;
@@ -1140,12 +1163,12 @@
     }
     function hitTestCell(clientX,clientY){
       const rect=collageCanvas.getBoundingClientRect();
-      const x=(clientX-rect.left)*(collageCanvas.width/rect.width);
-      const y=(clientY-rect.top)*(collageCanvas.height/rect.height);
+      const x=(clientX-rect.left)*(collageLogicalW/rect.width);
+      const y=(clientY-rect.top)*(collageLogicalH/rect.height);
       const [rows,cols]=getGridDim(collage.grid);
       const gap=collage.gap;
-      const cellW=(collageCanvas.width-gap*(cols-1))/cols;
-      const cellH=(collageCanvas.height-gap*(rows-1))/rows;
+      const cellW=(collageLogicalW-gap*(cols-1))/cols;
+      const cellH=(collageLogicalH-gap*(rows-1))/rows;
       const c=Math.floor(x/(cellW+gap));
       const r=Math.floor(y/(cellH+gap));
       if(c<0||c>=cols||r<0||r>=rows)return-1;
@@ -1204,9 +1227,12 @@
     $('#collageBack').onclick=closeCollage;
     $('#collageGridPicker').onclick=e=>{
       const btn=e.target.closest('button');if(!btn)return;
+      const g=+btn.dataset.grid;
+      const maxGrid=images.length>=9?9:images.length>=6?6:images.length>=4?4:2;
+      if(g>maxGrid){toast(`至少需要${g}张图片才能使用${g}宫格`);return}
       $('#collageGridPicker button').forEach(b=>b.classList.remove('active'));
       btn.classList.add('active');
-      collage.grid=+btn.dataset.grid;
+      collage.grid=g;
       renderCollage();
     };
     $('#collageGap').oninput=e=>{
