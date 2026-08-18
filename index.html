@@ -127,6 +127,8 @@
     .collage-slot.drag-over{border-color:var(--md-primary);box-shadow:0 0 0 2px var(--md-primary)}
     .collage-slot.selected{border-color:var(--md-primary);box-shadow:0 0 0 2px var(--md-primary)}
     .collage-slot .slot-del{position:absolute;top:2px;right:2px;width:16px;height:16px;border-radius:50%;background:rgba(0,0,0,.6);color:#fff;border:none;cursor:pointer;font-size:11px;display:flex;align-items:center;justify-content:center}
+    .collage-slot .slot-label{position:absolute;bottom:1px;left:3px;font-size:10px;color:#fff;text-shadow:0 1px 2px #000;font-weight:700}
+    .collage-canvas-wrap canvas.drag-over-cell{box-shadow:0 0 0 3px var(--md-primary)}
     .summary{border-radius:20px;padding:16px;background:var(--md-surface-container-high);color:var(--md-on-surface);box-shadow:var(--md-shadow-1)}
     .sum-top{display:flex;justify-content:space-between;align-items:end}
     .sum-top span{font-size:11px;color:var(--md-on-surface-variant);letter-spacing:.1em;text-transform:uppercase;font-weight:500}
@@ -610,6 +612,7 @@
     }
     function finishGenerate(){
       if(currentIdx>=0&&images[currentIdx])images[currentIdx].result=result;
+      if(currentIdx>=0)images[currentIdx].canvas=makePatternCanvas(currentIdx);
       render();
       stats();
       $('#localStatus').textContent='✓ 已在本地生成';
@@ -617,6 +620,7 @@
       $('#downloadLabel').textContent=images.length>1?`下载全部 ${images.length} 张`:'下载';
       canvas.hidden=false;
       $('#empty').hidden=true;
+      if(!$('#collagePage').hidden){renderCollageTray();renderCollage()}
     }
     function getUsedCounts(){
       const {cells,pal}=result;
@@ -771,7 +775,7 @@
       const p={easy:[29,12],balanced:[48,24],detail:[80,40]}[b.dataset.preset];
       ['gridWidth','maxColors'].forEach((id,i)=>{$('#'+id).value=p[i];$('#'+id).dispatchEvent(new Event('input'))});
     });
-    ['showGrid','showCodes','boardLines','showLegend','showAxis'].forEach(id=>$('#'+id).onchange=()=>render());
+    ['showGrid','showCodes','boardLines','showLegend','showAxis'].forEach(id=>$('#'+id).onchange=()=>{render();refreshCollageCanvases();if(!$('#collagePage').hidden){renderCollageTray();renderCollage()}});
     $('#mirror').onchange=schedule;
     $('#zoomIn').onclick=()=>{zoom=Math.min(5,zoom+.25);applyZoom()};
     $('#zoomOut').onclick=()=>{zoom=Math.max(.2,zoom-.25);applyZoom()};
@@ -855,12 +859,74 @@
     // ===== Collage Mode =====
     let collage={grid:2,gap:0,order:[],dragFrom:null};
     const collageCanvas=$('#collageCanvas'),cctx=collageCanvas.getContext('2d');
+    function makePatternCanvas(idx,maxCell=30){
+      const im=images[idx];if(!im||!im.result)return null;
+      const{w,h,cells,pal}=im.result;
+      const cell=Math.min(maxCell,Math.max(12,Math.floor(600/w)));
+      const showCodes=$('#showCodes').checked;
+      const showGrid=$('#showGrid').checked;
+      const showBoard=$('#boardLines').checked;
+      const showAxis=$('#showAxis').checked;
+      const axis=showAxis?Math.max(20,Math.round(cell*.92)):0;
+      const useCodes=showCodes&&cell>=22;
+      const pw=w*cell+axis*2;
+      const ph=h*cell+axis*2;
+      const cv=document.createElement('canvas');
+      cv.width=pw;cv.height=ph;
+      const cx=cv.getContext('2d');
+      cx.fillStyle='#fff';cx.fillRect(0,0,pw,ph);
+      cx.textAlign='center';cx.textBaseline='middle';
+      cx.font=`700 ${Math.max(8,cell*.32)}px monospace`;
+      cells.forEach((pi,i)=>{
+        const p=pal[pi],rgbv=rgb(p[2]);
+        const x=i%w,y=Math.floor(i/w);
+        const px=axis+x*cell,py=axis+y*cell;
+        cx.fillStyle=p[2];
+        cx.fillRect(px,py,cell,cell);
+        if(useCodes){
+          const bright=rgbv[0]*.299+rgbv[1]*.587+rgbv[2]*.114;
+          cx.fillStyle=bright>155?'#252525':'#fff';
+          cx.fillText(p[0],px+cell/2,py+cell/2);
+        }
+      });
+      if(showGrid){
+        cx.lineWidth=1;cx.strokeStyle='#777b7738';cx.beginPath();
+        for(let x=0;x<=w;x++){cx.moveTo(axis+x*cell+.5,axis);cx.lineTo(axis+x*cell+.5,axis+h*cell)}
+        for(let y=0;y<=h;y++){cx.moveTo(axis,axis+y*cell+.5);cx.lineTo(axis+w*cell,axis+y*cell+.5)}
+        cx.stroke();
+      }
+      if(showBoard){
+        for(let x=0;x<=w;x+=5){cx.lineWidth=x%10===0?2.2:1.2;cx.strokeStyle=x%10===0?'#b9473f':'#c96c65';cx.beginPath();cx.moveTo(axis+x*cell+.5,axis);cx.lineTo(axis+x*cell+.5,axis+h*cell);cx.stroke()}
+        for(let y=0;y<=h;y+=5){cx.lineWidth=y%10===0?2.2:1.2;cx.beginPath();cx.moveTo(axis,axis+y*cell+.5);cx.lineTo(axis+w*cell,axis+y*cell+.5);cx.stroke()}
+      }
+      if(showAxis){
+        cx.fillStyle='#757575';cx.font=`600 ${Math.max(9,cell*.35)}px sans-serif`;
+        cx.textAlign='center';cx.textBaseline='middle';
+        for(let x=0;x<w;x++){cx.fillText(String(x+1),axis+x*cell+cell/2,axis/2)}
+        cx.textAlign='right';cx.textBaseline='middle';
+        for(let y=0;y<h;y++){cx.fillText(String(y+1),axis-5,axis+y*cell+cell/2)}
+        cx.textAlign='center';cx.textBaseline='middle';
+        for(let x=0;x<w;x++){cx.fillText(String(x+1),axis+x*cell+cell/2,axis+h*cell+axis/2)}
+        cx.textAlign='left';
+        for(let y=0;y<h;y++){cx.fillText(String(y+1),axis+w*cell+5,axis+y*cell+cell/2)}
+      }
+      return cv;
+    }
+    function refreshCollageCanvases(){
+      images.forEach((im,i)=>{if(im.result)im.canvas=makePatternCanvas(i)});
+    }
     function openCollage(){
       if(images.length<2)return toast('至少需要2张图片才能拼图');
-      collage.grid=Math.min(collage.grid||2,images.length);
+      const maxGrid=images.length>=9?9:images.length>=6?6:images.length>=4?4:2;
+      collage.grid=Math.min(collage.grid||maxGrid,maxGrid);
       collage.order=images.map((_,i)=>i);
-      $('#collageGridPicker button').forEach(b=>b.classList.toggle('active',+b.dataset.grid===collage.grid));
+      $('#collageGridPicker button').forEach(b=>{
+        const g=+b.dataset.grid;
+        b.classList.toggle('active',g===collage.grid);
+        b.style.display=g<=maxGrid?'':'none';
+      });
       $('#collagePage').hidden=false;
+      refreshCollageCanvases();
       renderCollageTray();
       renderCollage();
     }
@@ -871,30 +937,34 @@
       if(imgs.length===0)return;
       const [rows,cols]=getGridDim(collage.grid);
       const gap=collage.gap;
-      const maxW=Math.min(window.innerWidth-80,900);
-      const maxH=window.innerHeight-350;
+      const maxW=Math.min(window.innerWidth-80,960);
+      const maxH=window.innerHeight-340;
       const cellW=Math.floor((maxW-gap*(cols-1))/cols);
       const cellH=Math.floor((maxH-gap*(rows-1))/rows);
-      const cell=Math.min(cellW,cellH);
+      const cell=Math.max(40,Math.min(cellW,cellH));
       const w=cell*cols+gap*(cols-1);
       const h=cell*rows+gap*(rows-1);
       collageCanvas.width=w;
       collageCanvas.height=h;
-      cctx.fillStyle='#fff';
+      cctx.fillStyle='#f5f5f5';
       cctx.fillRect(0,0,w,h);
       for(let i=0;i<rows*cols;i++){
         const r=Math.floor(i/cols),c=i%cols;
         const sx=c*(cell+gap),sy=r*(cell+gap);
         const im=imgs[i];
+        const pad=Math.max(1,gap>=8?2:0);
         if(im){
-          const iw=im.img.naturalWidth||im.img.width;
-          const ih=im.img.naturalHeight||im.img.height;
-          const scale=Math.max(cell/iw,cell/ih);
-          const dw=iw*scale,dh=ih*scale;
+          const src=im.canvas||im.img;
+          const sw=src.width||src.naturalWidth;
+          const sh=src.height||src.naturalHeight;
+          const scale=Math.max((cell-pad*2)/sw,(cell-pad*2)/sh);
+          const dw=sw*scale,dh=sh*scale;
           const dx=sx+(cell-dw)/2,dy=sy+(cell-dh)/2;
-          cctx.drawImage(im.img,dx,dy,dw,dh);
+          cctx.fillStyle='#fff';
+          cctx.fillRect(sx+pad,sy+pad,cell-pad*2,cell-pad*2);
+          cctx.drawImage(src,dx,dy,dw,dh);
         }else{
-          cctx.fillStyle='#f0f0f0';
+          cctx.fillStyle='#e8e8e8';
           cctx.fillRect(sx,sy,cell,cell);
         }
       }
@@ -903,10 +973,16 @@
       const tray=$('#collageTray');
       tray.innerHTML=collage.order.map(i=>{
         const im=images[i];if(!im)return'';
-        return `<div class="collage-slot" data-order="${i}" draggable="true"><img src="${im.img.src}"><span class="slot-del" data-del="${i}">×</span></div>`;
+        const src=im.canvas||im.img;
+        const srcUrl=im.canvas?im.canvas.toDataURL():im.img.src;
+        return `<div class="collage-slot" data-order="${i}" draggable="true"><img src="${srcUrl}"><span class="slot-del" data-del="${i}">×</span><span class="slot-label">${i+1}</span></div>`;
       }).join('');
       [...tray.querySelectorAll('.collage-slot')].forEach(el=>{
-        el.addEventListener('dragstart',e=>{collage.dragFrom=+el.dataset.order;e.dataTransfer.effectAllowed='move'});
+        el.addEventListener('dragstart',e=>{
+          collage.dragFrom=+el.dataset.order;
+          e.dataTransfer.effectAllowed='move';
+          e.dataTransfer.setData('text/plain',String(collage.dragFrom));
+        });
         el.addEventListener('dragover',e=>{e.preventDefault();el.classList.add('drag-over')});
         el.addEventListener('dragleave',()=>el.classList.remove('drag-over'));
         el.addEventListener('drop',e=>{
@@ -915,7 +991,10 @@
           if(collage.dragFrom!==null&&collage.dragFrom!==to){
             const fi=collage.order.indexOf(collage.dragFrom);
             const ti=collage.order.indexOf(to);
-            collage.order.splice(fi,1);collage.order.splice(ti,0,collage.dragFrom);
+            if(fi>=0&&ti>=0){
+              collage.order.splice(fi,1);
+              collage.order.splice(ti,0,collage.dragFrom);
+            }
             renderCollageTray();renderCollage();
           }
           collage.dragFrom=null;
@@ -925,7 +1004,14 @@
         e.stopPropagation();
         const idx=+btn.dataset.del;
         const pos=collage.order.indexOf(idx);
-        collage.order.splice(pos,1);
+        if(pos>=0){collage.order.splice(pos,1)}
+        const maxGrid=images.length>=9?9:images.length>=6?6:images.length>=4?4:2;
+        if(collage.grid>maxGrid)collage.grid=maxGrid;
+        $('#collageGridPicker button').forEach(b=>{
+          const g=+b.dataset.grid;
+          b.classList.toggle('active',g===collage.grid);
+          b.style.display=g<=maxGrid?'':'none';
+        });
         renderCollageTray();renderCollage();
       });
     }
@@ -937,16 +1023,18 @@
       const x=(e.clientX-rect.left)*(collageCanvas.width/rect.width);
       const y=(e.clientY-rect.top)*(collageCanvas.height/rect.height);
       const [rows,cols]=getGridDim(collage.grid);
-      const gap=collage.gap,cellW=(collageCanvas.width-gap*(cols-1))/cols,cellH=(collageCanvas.height-gap*(rows-1))/rows;
+      const gap=collage.gap;
+      const cellW=(collageCanvas.width-gap*(cols-1))/cols;
+      const cellH=(collageCanvas.height-gap*(rows-1))/rows;
       const c=Math.floor(x/(cellW+gap));
       const r=Math.floor(y/(cellH+gap));
-      const toIdx=Math.max(0,Math.min(rows*cols-1,r*cols+c));
-      const items=collage.order.slice();
-      const fi=items.indexOf(collage.dragFrom);
+      const toIdx=Math.max(0,Math.min(collage.order.length-1,r*cols+c));
+      const fi=collage.order.indexOf(collage.dragFrom);
       if(fi<0){collage.dragFrom=null;return}
+      const items=collage.order.slice();
       items.splice(fi,1);
-      let insertAt=toIdx;
-      if(fi<toIdx)insertAt=Math.max(0,toIdx-1);
+      let insertAt=Math.min(toIdx,items.length);
+      if(fi<toIdx)insertAt=Math.max(0,Math.min(items.length,toIdx-1));
       items.splice(insertAt,0,collage.dragFrom);
       collage.order=items;
       renderCollageTray();renderCollage();
@@ -971,11 +1059,12 @@
       collageCanvas.toBlob(blob=>{
         const a=document.createElement('a');
         a.href=URL.createObjectURL(blob);
-        a.download=`拼图-${collage.grid}宫格-${collage.gap}px.png`;
+        const ts=new Date().toISOString().slice(0,19).replace(/[:T]/g,'-');
+        a.download=`拼豆拼图-${collage.grid}宫格-${collage.gap}px-${ts}.png`;
         a.click();
-        setTimeout(()=>URL.revokeObjectURL(a.href),1000);
+        setTimeout(()=>URL.revokeObjectURL(a.href),2000);
         toast('拼图已下载');
-      },'image/png');
+      },'image/png',1.0);
     };
     window.addEventListener('resize',()=>{if(!$('#collagePage').hidden)renderCollage()});
   </script>
