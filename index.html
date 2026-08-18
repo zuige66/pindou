@@ -865,18 +865,20 @@
     // ===== Collage Mode =====
     let collage={grid:2,gap:0,order:[],dragFrom:null,selectedCell:-1};
     const collageCanvas=$('#collageCanvas'),cctx=collageCanvas.getContext('2d');
-    function makePatternCanvas(idx,maxCell=30){
+    function makePatternCanvas(idx){
       const im=images[idx];if(!im||!im.result)return null;
       const{w,h,cells,pal}=im.result;
-      const cell=Math.min(maxCell,Math.max(12,Math.floor(600/w)));
       const showCodes=$('#showCodes').checked;
       const showGrid=$('#showGrid').checked;
       const showBoard=$('#boardLines').checked;
       const showAxis=$('#showAxis').checked;
-      const axis=showAxis?Math.max(20,Math.round(cell*.92)):0;
+      const maxCanvasW=400;
+      const cell=Math.max(2,Math.floor(maxCanvasW/w));
+      const axis=showAxis?Math.max(12,Math.round(cell*.92)):0;
       const useCodes=showCodes&&cell>=22;
       const pw=w*cell+axis*2;
       const ph=h*cell+axis*2;
+      if(pw>4000||ph>4000)return null;
       const cv=document.createElement('canvas');
       cv.width=pw;cv.height=ph;
       const cx=cv.getContext('2d');
