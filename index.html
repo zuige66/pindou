@@ -98,6 +98,35 @@
     .thumb-del{position:absolute;top:2px;right:2px;width:16px;height:16px;border-radius:50%;background:rgba(0,0,0,.6);color:#fff;border:none;cursor:pointer;font-size:12px;line-height:1;display:flex;align-items:center;justify-content:center;opacity:0;transition:.15s}
     .thumb:hover .thumb-del{opacity:1}
     .thumb-del:hover{background:rgba(220,40,40,.85)}
+    .collage-fab{position:fixed;right:24px;bottom:24px;z-index:50;display:flex;align-items:center;gap:6px;background:var(--md-primary);color:var(--md-on-primary);border:none;border-radius:999px;padding:14px 20px;gap:8px;font-size:14px;font-weight:600;cursor:pointer;box-shadow:0 8px 24px rgba(0,0,0,.18);transition:.2s}
+    .collage-fab:hover{transform:translateY(-2px);box-shadow:0 12px 32px rgba(0,0,0,.24)}
+    .collage-fab svg{width:20px;height:20px}
+    .collage-page{position:fixed;inset:0;z-index:100;background:var(--md-background);display:flex;flex-direction:column}
+    .collage-header{display:flex;align-items:center;gap:16px;padding:14px 24px;background:var(--md-surface);border-bottom:1px solid var(--md-outline-variant)}
+    .collage-header strong{font-size:16px;font-weight:600}
+    .collage-back{border:none;background:transparent;color:var(--md-primary);font-size:14px;font-weight:600;cursor:pointer;padding:8px 12px;border-radius:8px}
+    .collage-back:hover{background:var(--md-surface-variant)}
+    .collage-tools{display:flex;align-items:center;gap:16px;margin-left:auto}
+    .collage-grid-picker{display:flex;gap:6px}
+    .collage-grid-picker button{border:none;background:var(--md-surface-container-high);border-radius:999px;padding:7px 14px;font-size:12px;font-weight:500;cursor:pointer;color:var(--md-on-surface);transition:.15s}
+    .collage-grid-picker button:hover{background:var(--md-surface-variant)}
+    .collage-grid-picker button.active{background:var(--md-primary);color:var(--md-on-primary)}
+    .collage-gap{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--md-on-surface-variant)}
+    .collage-gap input{width:80px;accent-color:var(--md-primary)}
+    .collage-gap output{color:var(--md-primary);font-weight:700}
+    .collage-download{border:none;background:var(--md-primary);color:var(--md-on-primary);border-radius:999px;padding:9px 20px;font-size:13px;font-weight:600;cursor:pointer;transition:.15s}
+    .collage-download:hover{filter:brightness(1.08)}
+    .collage-canvas-wrap{flex:1;display:flex;align-items:center;justify-content:center;padding:24px;overflow:auto;background:var(--md-surface-container-lowest)}
+    .collage-canvas-wrap canvas{max-width:100%;max-height:100%;border-radius:16px;box-shadow:var(--md-shadow-2);cursor:default}
+    .collage-canvas-wrap canvas.dragging{cursor:grabbing}
+    .collage-hint{position:absolute;bottom:32px;left:50%;transform:translateX(-50%);font-size:12px;color:var(--md-on-surface-variant);background:var(--md-surface-container);padding:6px 14px;border-radius:999px;pointer-events:none;opacity:.85}
+    .collage-tray{display:flex;gap:10px;padding:12px 24px;background:var(--md-surface);border-top:1px solid var(--md-outline-variant);overflow-x:auto;flex-shrink:0}
+    .collage-slot{flex-shrink:0;width:60px;height:60px;border-radius:10px;overflow:hidden;border:2px solid transparent;cursor:pointer;background:var(--md-surface-container-high);transition:.15s;position:relative}
+    .collage-slot img{width:100%;height:100%;object-fit:cover;pointer-events:none}
+    .collage-slot:hover{border-color:var(--md-primary)}
+    .collage-slot.drag-over{border-color:var(--md-primary);box-shadow:0 0 0 2px var(--md-primary)}
+    .collage-slot.selected{border-color:var(--md-primary);box-shadow:0 0 0 2px var(--md-primary)}
+    .collage-slot .slot-del{position:absolute;top:2px;right:2px;width:16px;height:16px;border-radius:50%;background:rgba(0,0,0,.6);color:#fff;border:none;cursor:pointer;font-size:11px;display:flex;align-items:center;justify-content:center}
     .summary{border-radius:20px;padding:16px;background:var(--md-surface-container-high);color:var(--md-on-surface);box-shadow:var(--md-shadow-1)}
     .sum-top{display:flex;justify-content:space-between;align-items:end}
     .sum-top span{font-size:11px;color:var(--md-on-surface-variant);letter-spacing:.1em;text-transform:uppercase;font-weight:500}
@@ -253,8 +282,33 @@
           <span id="localStatus">✓ 图片不会离开此设备</span>
         </div>
         <div class="thumb-strip" id="thumbStrip" hidden></div>
+        <button class="collage-fab" id="collageFab" hidden>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+          <span>去拼图</span>
+        </button>
       </main>
     </div>
+  </div>
+  <div class="collage-page" id="collagePage" hidden>
+    <div class="collage-header">
+      <button class="collage-back" id="collageBack">← 返回</button>
+      <strong>拼图模式</strong>
+      <div class="collage-tools">
+        <div class="collage-grid-picker" id="collageGridPicker">
+          <button data-grid="2" class="active">2 宫格</button>
+          <button data-grid="4">4 宫格</button>
+          <button data-grid="6">6 宫格</button>
+          <button data-grid="9">9 宫格</button>
+        </div>
+        <label class="collage-gap">间隙 <output id="gapVal">0</output><input id="collageGap" type="range" min="0" max="40" value="0"></label>
+        <button class="collage-download" id="collageDownload">下载拼图</button>
+      </div>
+    </div>
+    <div class="collage-canvas-wrap">
+      <canvas id="collageCanvas"></canvas>
+      <div class="collage-hint" id="collageHint">拖拽图片可以换位</div>
+    </div>
+    <div class="collage-tray" id="collageTray"></div>
   </div>
   <div class="toast" id="toast"></div>
   <div class="modal" id="modal" hidden><button id="modalClose" aria-label="关闭">×</button><img id="modalImage" alt="放大查看拼豆图纸"></div>
@@ -330,8 +384,10 @@
     }
     function renderThumbs(){
       const strip=$('#thumbStrip');
-      if(images.length<=1){strip.hidden=true;strip.innerHTML='';return}
+      const fab=$('#collageFab');
+      if(images.length<=1){strip.hidden=true;strip.innerHTML='';fab.hidden=true;return}
       strip.hidden=false;
+      fab.hidden=false;
       strip.innerHTML=images.map((it,i)=>`<div class="thumb${i===currentIdx?' active':''}" data-idx="${i}"><span class="thumb-num">${i+1}</span><img src="${it.img.src}" alt="${it.name}"><button class="thumb-del" data-del="${i}" title="移除">×</button></div>`).join('');
       [...strip.querySelectorAll('.thumb')].forEach(el=>el.onclick=e=>{if(e.target.dataset.del!==undefined)return;selectImage(+el.dataset.idx)});
       [...strip.querySelectorAll('.thumb-del')].forEach(el=>el.onclick=e=>{e.stopPropagation();removeImage(+el.dataset.del)});
@@ -781,7 +837,7 @@
       }).join('');
       $$('.replace-color').forEach(el=>el.onclick=()=>{const newPi=+el.dataset.idx;doReplace(replaceTargetIndex,newPi)});
     }
-    $('#replaceSearch').oninput=e=>{const pal=result?result.pal:palettes.mard;renderReplaceColors(pal,e.target.value)};
+    $('#replaceModal').oninput=e=>{const pal=result?result.pal:palettes.mard;renderReplaceColors(pal,e.target.value)};
     function doReplace(oldPi,newPi){
       if(!result)return;
       if(oldPi===newPi){toast('新颜色与原颜色相同');return}
@@ -796,6 +852,132 @@
       $('#replaceModal').hidden=true;
       toast(`已替换 ${replaced} 颗 ${oldCode} → ${newCode}`);
     }
+    // ===== Collage Mode =====
+    let collage={grid:2,gap:0,order:[],dragFrom:null};
+    const collageCanvas=$('#collageCanvas'),cctx=collageCanvas.getContext('2d');
+    function openCollage(){
+      if(images.length<2)return toast('至少需要2张图片才能拼图');
+      collage.grid=Math.min(collage.grid||2,images.length);
+      collage.order=images.map((_,i)=>i);
+      $('#collageGridPicker button').forEach(b=>b.classList.toggle('active',+b.dataset.grid===collage.grid));
+      $('#collagePage').hidden=false;
+      renderCollageTray();
+      renderCollage();
+    }
+    function closeCollage(){$('#collagePage').hidden=true}
+    function getGridDim(n){if(n<=2)return[1,2];if(n<=4)return[2,2];if(n<=6)return[2,3];return[3,3]}
+    function renderCollage(){
+      const imgs=collage.order.map(i=>images[i]).filter(Boolean);
+      if(imgs.length===0)return;
+      const [rows,cols]=getGridDim(collage.grid);
+      const gap=collage.gap;
+      const maxW=Math.min(window.innerWidth-80,900);
+      const maxH=window.innerHeight-350;
+      const cellW=Math.floor((maxW-gap*(cols-1))/cols);
+      const cellH=Math.floor((maxH-gap*(rows-1))/rows);
+      const cell=Math.min(cellW,cellH);
+      const w=cell*cols+gap*(cols-1);
+      const h=cell*rows+gap*(rows-1);
+      collageCanvas.width=w;
+      collageCanvas.height=h;
+      cctx.fillStyle='#fff';
+      cctx.fillRect(0,0,w,h);
+      for(let i=0;i<rows*cols;i++){
+        const r=Math.floor(i/cols),c=i%cols;
+        const sx=c*(cell+gap),sy=r*(cell+gap);
+        const im=imgs[i];
+        if(im){
+          const iw=im.img.naturalWidth||im.img.width;
+          const ih=im.img.naturalHeight||im.img.height;
+          const scale=Math.max(cell/iw,cell/ih);
+          const dw=iw*scale,dh=ih*scale;
+          const dx=sx+(cell-dw)/2,dy=sy+(cell-dh)/2;
+          cctx.drawImage(im.img,dx,dy,dw,dh);
+        }else{
+          cctx.fillStyle='#f0f0f0';
+          cctx.fillRect(sx,sy,cell,cell);
+        }
+      }
+    }
+    function renderCollageTray(){
+      const tray=$('#collageTray');
+      tray.innerHTML=collage.order.map(i=>{
+        const im=images[i];if(!im)return'';
+        return `<div class="collage-slot" data-order="${i}" draggable="true"><img src="${im.img.src}"><span class="slot-del" data-del="${i}">×</span></div>`;
+      }).join('');
+      [...tray.querySelectorAll('.collage-slot')].forEach(el=>{
+        el.addEventListener('dragstart',e=>{collage.dragFrom=+el.dataset.order;e.dataTransfer.effectAllowed='move'});
+        el.addEventListener('dragover',e=>{e.preventDefault();el.classList.add('drag-over')});
+        el.addEventListener('dragleave',()=>el.classList.remove('drag-over'));
+        el.addEventListener('drop',e=>{
+          e.preventDefault();el.classList.remove('drag-over');
+          const to=+el.dataset.order;
+          if(collage.dragFrom!==null&&collage.dragFrom!==to){
+            const fi=collage.order.indexOf(collage.dragFrom);
+            const ti=collage.order.indexOf(to);
+            collage.order.splice(fi,1);collage.order.splice(ti,0,collage.dragFrom);
+            renderCollageTray();renderCollage();
+          }
+          collage.dragFrom=null;
+        });
+      });
+      [...tray.querySelectorAll('.slot-del')].forEach(btn=>btn.onclick=e=>{
+        e.stopPropagation();
+        const idx=+btn.dataset.del;
+        const pos=collage.order.indexOf(idx);
+        collage.order.splice(pos,1);
+        renderCollageTray();renderCollage();
+      });
+    }
+    collageCanvas.addEventListener('dragover',e=>{e.preventDefault();e.dataTransfer.dropEffect='move'});
+    collageCanvas.addEventListener('drop',e=>{
+      e.preventDefault();
+      if(collage.dragFrom===null)return;
+      const rect=collageCanvas.getBoundingClientRect();
+      const x=(e.clientX-rect.left)*(collageCanvas.width/rect.width);
+      const y=(e.clientY-rect.top)*(collageCanvas.height/rect.height);
+      const [rows,cols]=getGridDim(collage.grid);
+      const gap=collage.gap,cellW=(collageCanvas.width-gap*(cols-1))/cols,cellH=(collageCanvas.height-gap*(rows-1))/rows;
+      const c=Math.floor(x/(cellW+gap));
+      const r=Math.floor(y/(cellH+gap));
+      const toIdx=Math.max(0,Math.min(rows*cols-1,r*cols+c));
+      const items=collage.order.slice();
+      const fi=items.indexOf(collage.dragFrom);
+      if(fi<0){collage.dragFrom=null;return}
+      items.splice(fi,1);
+      let insertAt=toIdx;
+      if(fi<toIdx)insertAt=Math.max(0,toIdx-1);
+      items.splice(insertAt,0,collage.dragFrom);
+      collage.order=items;
+      renderCollageTray();renderCollage();
+      collage.dragFrom=null;
+    });
+    $('#collageFab').onclick=openCollage;
+    $('#collageBack').onclick=closeCollage;
+    $('#collageGridPicker').onclick=e=>{
+      const btn=e.target.closest('button');if(!btn)return;
+      $('#collageGridPicker button').forEach(b=>b.classList.remove('active'));
+      btn.classList.add('active');
+      collage.grid=+btn.dataset.grid;
+      renderCollage();
+    };
+    $('#collageGap').oninput=e=>{
+      collage.gap=+e.target.value;
+      $('#gapVal').textContent=collage.gap;
+      renderCollage();
+    };
+    $('#collageDownload').onclick=()=>{
+      if(collage.order.length===0)return toast('没有图片可下载');
+      collageCanvas.toBlob(blob=>{
+        const a=document.createElement('a');
+        a.href=URL.createObjectURL(blob);
+        a.download=`拼图-${collage.grid}宫格-${collage.gap}px.png`;
+        a.click();
+        setTimeout(()=>URL.revokeObjectURL(a.href),1000);
+        toast('拼图已下载');
+      },'image/png');
+    };
+    window.addEventListener('resize',()=>{if(!$('#collagePage').hidden)renderCollage()});
   </script>
 </body>
 </html>
