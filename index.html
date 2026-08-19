@@ -859,15 +859,18 @@
       result=item.result;img=item.img;
       render(scale);
       return new Promise(res=>{
-        canvas.toBlob(blob=>{
-          const a=document.createElement('a');
-          const base=item.name.replace(/\.[^.]+$/,'');
-          a.href=URL.createObjectURL(blob);
-          a.download=`豆格图纸-${base}-${item.result.w}x${item.result.h}.png`;
-          a.click();
-          setTimeout(()=>URL.revokeObjectURL(a.href),1000);
-          res();
-        },'image/png');
+        setTimeout(()=>{
+          canvas.toBlob(blob=>{
+            const a=document.createElement('a');
+            const base=item.name.replace(/\.[^.]+$/,'');
+            a.href=URL.createObjectURL(blob);
+            a.download=`豆格图纸-${base}-${item.result.w}x${item.result.h}.png`;
+            document.body.appendChild(a);
+            a.click();
+            setTimeout(()=>{document.body.removeChild(a);URL.revokeObjectURL(a.href)},1500);
+            res();
+          },'image/png');
+        },50);
       }).finally(()=>{
         result=savedResult;img=savedImg;
       });
@@ -885,7 +888,7 @@
       toast(`开始下载 ${valid.length} 张图纸…`);
       for(let i=0;i<valid.length;i++){
         await downloadOne(valid[i],scale);
-        await new Promise(r=>setTimeout(r,400));
+        await new Promise(r=>setTimeout(r,900));
       }
       render();
       toast(`已下载 ${valid.length} 张图纸`);
