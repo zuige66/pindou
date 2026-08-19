@@ -358,15 +358,22 @@
       if(!arr.length)return toast('请选择 JPG、PNG 或 WEBP 图片');
       if(!append)images=[];
       let pending=arr.length;
+      let newFiles=[];
       arr.forEach(f=>{
         const rd=new FileReader;
         rd.onload=e=>{
           const im=new Image;
           im.onload=()=>{
             images.push({name:f.name,img:im,result:null});
+            newFiles.push(images.length-1);
             if(--pending===0){
               currentIdx=append&&currentIdx>=0?currentIdx:images.length-arr.length;
               selectImage(currentIdx);
+              setTimeout(()=>{
+                if(collageGenQueue)return;
+                const needGen=newFiles.filter(i=>!images[i].result);
+                if(needGen.length>1)generateAllForCollage();
+              },100);
             }
           };
           im.src=e.target.result;
@@ -967,7 +974,7 @@
         try{renderCollage()}catch(e){console.warn(e)}
         const needGen=images.map((im,i)=>({im,i})).filter(x=>!x.im.result);
         if(needGen.length>0){
-          showCollageNotice(`${needGen.length} 张图片尚未生成拼豆图纸`,true);
+          generateAllForCollage();
         }else{
           hideCollageNotice();
         }
@@ -995,14 +1002,8 @@
         const canvasWrap=document.querySelector('.collage-canvas-wrap');
         if(canvasWrap)canvasWrap.appendChild(bar);
       }
-      bar.innerHTML=`<span>${msg}</span>`+(withGen?`<button id="collageGenAll" style="border:none;background:var(--md-tertiary);color:var(--md-on-tertiary);padding:6px 14px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer">一键生成</button>`:'');
+      bar.innerHTML=`<span>${msg}</span>`;
       bar.style.display='flex';
-      if(withGen){
-        $('#collageGenAll').onclick=()=>{
-          hideCollageNotice();
-          generateAllForCollage();
-        };
-      }
     }
     function hideCollageNotice(){const bar=$('#collageNotice');if(bar)bar.style.display='none'}
     let collageGenQueue=null,collageGenSavedIdx=-1;
