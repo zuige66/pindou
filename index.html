@@ -4,6 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>豆格 BEADGRID · 图片转拼豆图纸</title>
+  <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
   <style>
     :root{
       --md-primary:#6750A4;
@@ -854,44 +855,80 @@
     $('#modal').onclick=e=>{if(e.target.id==='modal')$('#modal').hidden=true};
     document.addEventListener('keydown',e=>{if(e.key==='Escape'){$('#modal').hidden=true;$('#replaceModal').hidden=true}});
     window.addEventListener('resize',()=>{if(result)applyZoom()});
-    function downloadOne(item,scale){
+    function getImageBlob(item,scale){
       const savedResult=result,savedImg=img;
       result=item.result;img=item.img;
       render(scale);
       return new Promise(res=>{
         setTimeout(()=>{
           canvas.toBlob(blob=>{
-            const a=document.createElement('a');
-            const base=item.name.replace(/\.[^.]+$/,'');
-            a.href=URL.createObjectURL(blob);
-            a.download=`豆格图纸-${base}-${item.result.w}x${item.result.h}.png`;
-            document.body.appendChild(a);
-            a.click();
-            setTimeout(()=>{document.body.removeChild(a);URL.revokeObjectURL(a.href)},1500);
-            res();
+            result=savedResult;img=savedImg;
+            res(blob);
           },'image/png');
-        },50);
-      }).finally(()=>{
-        result=savedResult;img=savedImg;
+        },30);
       });
+    }
+    function downloadSingle(blob,filename){
+      const a=document.createElement('a');
+      a.href=URL.createObjectURL(blob);
+      a.download=filename;
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(()=>{document.body.removeChild(a);URL.revokeObjectURL(a.href)},2000);
     }
     $('#download').onclick=async()=>{
       const valid=images.filter(it=>it.result);
       if(valid.length===0)return;
       const scale=Math.max(32,Math.ceil(2600/result.w));
       if(valid.length===1){
-        await downloadOne(valid[0],scale);
+        const blob=await getImageBlob(valid[0],scale);
+        const base=valid[0].name.replace(/\.[^.]+$/,'');
+        downloadSingle(blob,`豆格图纸-${base}-${valid[0].result.w}x${valid[0].result.h}.png`);
         render();
         toast('高清图纸已下载');
         return;
       }
-      toast(`开始下载 ${valid.length} 张图纸…`);
-      for(let i=0;i<valid.length;i++){
-        await downloadOne(valid[i],scale);
-        await new Promise(r=>setTimeout(r,900));
+      toast(`正在打包 ${valid.length} 张图纸…`);
+      if(typeof JSZip==='undefined'){
+        toast('ZIP库加载中…请稍候');
+        await new Promise(r=>setTimeout(r,800));
       }
-      render();
-      toast(`已下载 ${valid.length} 张图纸`);
+      try{
+        if(typeof JSZip==='undefined')throw new Error('JSZip未加载');
+        const zip=new JSZip();
+        for(let i=0;i<valid.length;i++){
+          showCollageNotice(`正在打包 ${i+1}/${valid.length}…`,false);
+          const item=valid[i];
+          const blob=await getImageBlob(item,scale);
+          const base=item.name.replace(/\.[^.]+$/,'');
+          zip.file(`豆格图纸-${base}-${item.result.w}x${item.result.h}.png`,blob);
+        }
+        hideCollageNotice();
+        toast('正在生成ZIP，请稍候…');
+        const zipBlob=await zip.generateAsync({type:'blob'},meta=>{
+          showCollageNotice(`ZIP生成中 ${Math.round(meta.percent)}%…`,false);
+        });
+        hideCollageNotice();
+        const ts=new Date();
+        const pad=n=>String(n).padStart(2,'0');
+        const zipname=`豆格图纸-${valid.length}张-${ts.getFullYear()}${pad(ts.getMonth()+1)}${pad(ts.getDate())}-${pad(ts.getHours())}${pad(ts.getMinutes())}.zip`;
+        downloadSingle(zipBlob,zipname);
+        render();
+        toast(`已下载 ${valid.length} 张图纸 (ZIP打包)`);
+      }catch(e){
+        hideCollageNotice();
+        console.error(e);
+        toast('打包失败，改为逐个下载…');
+        for(let i=0;i<valid.length;i++){
+          const item=valid[i];
+          const blob=await getImageBlob(item,scale);
+          const base=item.name.replace(/\.[^.]+$/,'');
+          downloadSingle(blob,`豆格图纸-${base}-${item.result.w}x${item.result.h}.png`);
+          await new Promise(r=>setTimeout(r,1200));
+        }
+        render();
+        toast(`已下载 ${valid.length} 张图纸`);
+      }
     };
     function openReplaceModal(currentPi){
       replaceTargetIndex=currentPi;
