@@ -50,6 +50,9 @@
     .section+.section{border-top:none;margin-top:12px;padding-top:12px}
     .sect-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;padding:0 4px}
     .sect-head b{font-size:13px;letter-spacing:.15em;text-transform:uppercase;font-weight:600;color:var(--md-on-surface-variant)}
+    .adjust-toggle{display:flex;gap:4px}
+    .adjust-toggle .adj-btn{border:none;background:var(--md-surface-container-high);border-radius:999px;padding:4px 10px;font-size:11px;font-weight:500;cursor:pointer;color:var(--md-on-surface);transition:.15s}
+    .adjust-toggle .adj-btn.active{background:var(--md-primary);color:var(--md-on-primary)}
     .action-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
     .action-btn{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:14px 8px;border:none;border-radius:20px;cursor:pointer;font-size:13px;font-weight:600;transition:.15s;background:var(--md-surface-container-high);color:var(--md-on-surface);box-shadow:var(--md-shadow-1)}
     .action-btn input{display:none}
@@ -211,7 +214,12 @@
           </div>
         </section>
         <section class="section">
-          <div class="sect-head"><b>参数调节</b></div>
+          <div class="sect-head"><b>参数调节</b>
+            <div class="adjust-toggle">
+              <button class="adj-btn active" id="mainUnified">统一</button>
+              <button class="adj-btn" id="mainIndividual">单独</button>
+            </div>
+          </div>
           <div class="preset">
             <button data-preset="easy">简单</button>
             <button class="active" data-preset="balanced">均衡</button>
@@ -1254,20 +1262,20 @@
       $('#gapVal').textContent=collage.gap;
       renderCollage();
     };
-    $('#unifiedAdjust').onclick=()=>{
-      collage.unifiedAdjust=true;
-      $('#unifiedAdjust').classList.add('active');
-      $('#individualAdjust').classList.remove('active');
-      $('#collageHint').textContent='拖拽或点击图片可换位 · 间隙滑块调整间距 · 当前：统一调整';
-      toast('已切换为统一调整');
-    };
-    $('#individualAdjust').onclick=()=>{
-      collage.unifiedAdjust=false;
-      $('#individualAdjust').classList.add('active');
-      $('#unifiedAdjust').classList.remove('active');
-      $('#collageHint').textContent='拖拽或点击图片可换位 · 间隙滑块调整间距 · 当前：单独调整';
-      toast('已切换为单独调整');
-    };
+    function setUnifiedAdjust(unified){
+      collage.unifiedAdjust=unified;
+      $('#unifiedAdjust').classList.toggle('active',unified);
+      $('#individualAdjust').classList.toggle('active',!unified);
+      $('#mainUnified').classList.toggle('active',unified);
+      $('#mainIndividual').classList.toggle('active',!unified);
+      const hint=unified?'拖拽或点击图片可换位 · 间隙滑块调整间距 · 当前：统一调整':'拖拽或点击图片可换位 · 间隙滑块调整间距 · 当前：单独调整';
+      $('#collageHint').textContent=hint;
+      toast(unified?'已切换为统一调整':'已切换为单独调整');
+    }
+    $('#unifiedAdjust').onclick=()=>setUnifiedAdjust(true);
+    $('#individualAdjust').onclick=()=>setUnifiedAdjust(false);
+    $('#mainUnified').onclick=()=>setUnifiedAdjust(true);
+    $('#mainIndividual').onclick=()=>setUnifiedAdjust(false);
     $('#collageDownload').onclick=()=>{
       if(collage.order.length===0)return toast('没有图片可下载');
       const imgs=collage.order.map(i=>images[i]).filter(Boolean);
