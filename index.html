@@ -107,6 +107,10 @@
     .collage-back{border:none;background:transparent;color:var(--md-primary);font-size:14px;font-weight:600;cursor:pointer;padding:8px 12px;border-radius:8px}
     .collage-back:hover{background:var(--md-surface-variant)}
     .collage-tools{display:flex;align-items:center;gap:16px;margin-left:auto}
+    .collage-adjust-toggle{display:flex;align-items:center;gap:6px;font-size:12px}
+    .collage-adjust-toggle .adjust-label{color:var(--md-on-surface-variant);margin-right:4px}
+    .collage-adjust-toggle .adjust-btn{border:none;background:var(--md-surface-container-high);border-radius:999px;padding:6px 12px;font-size:12px;font-weight:500;cursor:pointer;color:var(--md-on-surface);transition:.15s}
+    .collage-adjust-toggle .adjust-btn.active{background:var(--md-primary);color:var(--md-on-primary)}
     .collage-grid-picker{display:flex;gap:6px}
     .collage-grid-picker button{border:none;background:var(--md-surface-container-high);border-radius:999px;padding:7px 14px;font-size:12px;font-weight:500;cursor:pointer;color:var(--md-on-surface);transition:.15s}
     .collage-grid-picker button:hover{background:var(--md-surface-variant)}
@@ -291,11 +295,16 @@
       </main>
     </div>
   </div>
-  <div class="collage-page" id="collagePage" hidden>
+    <div class="collage-page" id="collagePage" hidden>
     <div class="collage-header">
       <button class="collage-back" id="collageBack">← 返回</button>
       <strong>拼图模式</strong>
       <div class="collage-tools">
+        <div class="collage-adjust-toggle" id="collageAdjustToggle">
+          <span class="adjust-label">调整模式</span>
+          <button class="adjust-btn active" id="unifiedAdjust">统一</button>
+          <button class="adjust-btn" id="individualAdjust">单独</button>
+        </div>
         <div class="collage-grid-picker" id="collageGridPicker">
           <button data-grid="2" class="active">2 宫格</button>
           <button data-grid="4">4 宫格</button>
@@ -308,7 +317,7 @@
     </div>
     <div class="collage-canvas-wrap">
       <canvas id="collageCanvas"></canvas>
-      <div class="collage-hint" id="collageHint">拖拽或点击图片可换位 · 间隙滑块调整间距</div>
+      <div class="collage-hint" id="collageHint">拖拽或点击图片可换位 · 间隙滑块调整间距 · 当前：统一调整</div>
     </div>
     <div class="collage-tray" id="collageTray"></div>
   </div>
@@ -432,7 +441,13 @@
       }
     }
     function schedule(){clearTimeout(timer);timer=setTimeout(()=>{
-      if(currentIdx>=0)generate();
+      if(currentIdx>=0){
+        if(!$('#collagePage').hidden&&collage.unifiedAdjust&&images.length>1){
+          generateAllForCollage(true);
+        }else{
+          generate();
+        }
+      }
     },80)}
     function denoise(cells,w,h,pal,smooth){
       const N=w*h;
@@ -885,7 +900,7 @@
       toast(`已替换 ${replaced} 颗 ${oldCode} → ${newCode}`);
     }
     // ===== Collage Mode =====
-    let collage={grid:2,gap:0,order:[],dragFrom:null,selectedCell:-1};
+    let collage={grid:2,gap:0,order:[],dragFrom:null,selectedCell:-1,unifiedAdjust:true};
     const collageCanvas=$('#collageCanvas');
     const cctx=collageCanvas?collageCanvas.getContext('2d'):null;
     let collageLogicalW=0,collageLogicalH=0;
@@ -1007,8 +1022,9 @@
     }
     function hideCollageNotice(){const bar=$('#collageNotice');if(bar)bar.style.display='none'}
     let collageGenQueue=null,collageGenSavedIdx=-1;
-    function generateAllForCollage(){
-      collageGenQueue=images.map((im,i)=>i).filter(i=>!images[i].result);
+    function generateAllForCollage(force){
+      const filter=force?i=>true:i=>!images[i].result;
+      collageGenQueue=images.map((im,i)=>i).filter(filter);
       if(collageGenQueue.length===0)return;
       collageGenSavedIdx=currentIdx;
       showCollageNotice(`正在生成 0/${collageGenQueue.length}…`,false);
@@ -1237,6 +1253,20 @@
       collage.gap=+e.target.value;
       $('#gapVal').textContent=collage.gap;
       renderCollage();
+    };
+    $('#unifiedAdjust').onclick=()=>{
+      collage.unifiedAdjust=true;
+      $('#unifiedAdjust').classList.add('active');
+      $('#individualAdjust').classList.remove('active');
+      $('#collageHint').textContent='拖拽或点击图片可换位 · 间隙滑块调整间距 · 当前：统一调整';
+      toast('已切换为统一调整');
+    };
+    $('#individualAdjust').onclick=()=>{
+      collage.unifiedAdjust=false;
+      $('#individualAdjust').classList.add('active');
+      $('#unifiedAdjust').classList.remove('active');
+      $('#collageHint').textContent='拖拽或点击图片可换位 · 间隙滑块调整间距 · 当前：单独调整';
+      toast('已切换为单独调整');
     };
     $('#collageDownload').onclick=()=>{
       if(collage.order.length===0)return toast('没有图片可下载');
