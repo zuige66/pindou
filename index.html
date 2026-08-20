@@ -4,6 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>豆格 BEADGRID · 图片转拼豆图纸</title>
+  <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
   <style>
     :root{
       --md-primary:#6750A4;
@@ -54,12 +55,16 @@
     .adjust-toggle .adj-btn{border:none;background:var(--md-surface-container-high);border-radius:999px;padding:4px 10px;font-size:11px;font-weight:500;cursor:pointer;color:var(--md-on-surface);transition:.15s}
     .adjust-toggle .adj-btn.active{background:var(--md-primary);color:var(--md-on-primary)}
     .action-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+    .action-col{display:flex;flex-direction:column;gap:8px}
+    .action-col .action-btn{padding:10px 8px;font-size:12px;gap:6px;border-radius:16px}
+    .action-col .action-icon{width:20px;height:20px}
     .action-btn{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:14px 8px;border:none;border-radius:20px;cursor:pointer;font-size:13px;font-weight:600;transition:.15s;background:var(--md-surface-container-high);color:var(--md-on-surface);box-shadow:var(--md-shadow-1)}
     .action-btn input{display:none}
     .action-icon{width:24px;height:24px;flex-shrink:0;stroke-width:2.2!important}
     .action-upload{background:var(--md-primary-container);color:var(--md-on-primary-container)}
     .action-upload:hover,.action-upload.drag{filter:brightness(.94)}
     .action-download{background:var(--md-primary);color:var(--md-on-primary)}
+    .action-download-secondary{background:var(--md-secondary-container);color:var(--md-on-secondary-container);box-shadow:none}
     .action-download:disabled{opacity:.35;cursor:not-allowed;box-shadow:none}
     .action-download:not(:disabled):hover{filter:brightness(1.08)}
     .row{display:block;margin:12px 0}
@@ -67,6 +72,7 @@
     .row output{color:var(--md-primary);font-weight:700;font-variant-numeric:tabular-nums;font-size:13px}
     input[type=range]{width:100%;accent-color:var(--md-primary);height:20px}
     .preset{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+    .preset.adjust-toggle-big{grid-template-columns:repeat(2,1fr)}
     .preset button{border:none;background:var(--md-surface-container-high);border-radius:999px;padding:9px 8px;font-size:12px;font-weight:500;cursor:pointer;transition:.15s;color:var(--md-on-surface)}
     .preset button:hover{background:var(--md-surface-variant)}
     .preset button.active{background:var(--md-secondary-container);color:var(--md-on-secondary-container);font-weight:600}
@@ -214,10 +220,16 @@
               <svg class="action-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
               <span>上传</span>
             </label>
-            <button class="action-btn action-download" id="download" disabled title="下载正方格施工图 PNG（多图时打包全部下载）">
-              <svg class="action-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-              <span id="downloadLabel">下载</span>
-            </button>
+            <div class="action-col">
+              <button class="action-btn action-download" id="downloadZip" disabled title="下载所有图纸并打包为 ZIP">
+                <svg class="action-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                <span id="downloadZipLabel">下载 ZIP</span>
+              </button>
+              <button class="action-btn action-download action-download-secondary" id="downloadPng" disabled title="逐张下载 PNG 图纸">
+                <svg class="action-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><path d="M3 9h18"/><path d="M9 21V9"/></svg>
+                <span id="downloadPngLabel">下载 PNG</span>
+              </button>
+            </div>
           </div>
         </section>
         <section class="section">
@@ -230,16 +242,10 @@
           </div>
         </section>
         <section class="section">
-          <div class="sect-head"><b>参数调节</b>
-            <div class="adjust-toggle">
-              <button class="adj-btn active" id="mainUnified">统一</button>
-              <button class="adj-btn" id="mainIndividual">单独</button>
-            </div>
-          </div>
-          <div class="preset">
-            <button data-preset="easy">简单</button>
-            <button class="active" data-preset="balanced">均衡</button>
-            <button data-preset="detail">精细</button>
+          <div class="sect-head"><b>参数调节</b></div>
+          <div class="preset adjust-toggle-big">
+            <button class="adj-btn active" id="mainUnified">统一</button>
+            <button class="adj-btn" id="mainIndividual">单独</button>
           </div>
           <label class="row">
             <span class="row-head"><span>像素大小</span><output id="widthVal">48 颗</output></span>
@@ -452,7 +458,8 @@
       img=item.img;
       result=item.result;
       $('#fileInfo').textContent=item.name+' · '+item.img.width+'×'+item.img.height;
-      $('#downloadLabel').textContent=images.length>1?`下载全部 ${images.length} 张`:'下载';
+      $('#downloadZipLabel').textContent=images.length>1?`ZIP ${images.length} 张`:'下载ZIP';
+      $('#downloadPngLabel').textContent=images.length>1?`PNG ${images.length} 张`:'下载PNG';
       renderThumbs();
       if(result){render();stats()}else{generate()}
     }
@@ -478,8 +485,10 @@
         currentIdx=-1;img=null;result=null;
         canvas.hidden=true;$('#empty').hidden=false;
         $('#fileInfo').textContent='等待图片 · 未开始处理';
-        $('#download').disabled=true;
-        $('#downloadLabel').textContent='下载';
+        $('#downloadZip').disabled=true;
+        $('#downloadPng').disabled=true;
+        $('#downloadZipLabel').textContent='下载 ZIP';
+        $('#downloadPngLabel').textContent='下载 PNG';
         $('#thumbStrip').hidden=true;$('#thumbStrip').innerHTML='';
         $('#totalCount').textContent='0 颗';$('#sizeStat').textContent='0×0';$('#colorStat').textContent='0';
         $('#paletteList').innerHTML='<div style="font-size:11px;color:var(--md-on-surface-variant);padding:14px 0">生成图纸后，在这里查看色号与准确数量。</div>';$('#listNum').textContent='0 COLORS';
@@ -712,8 +721,10 @@
         render();
         stats();
         $('#localStatus').textContent='✓ 已在本地生成';
-        $('#download').disabled=false;
-        $('#downloadLabel').textContent=images.length>1?`下载全部 ${images.length} 张`:'下载';
+        $('#downloadZip').disabled=false;
+        $('#downloadPng').disabled=false;
+        $('#downloadZipLabel').textContent=images.length>1?`ZIP ${images.length} 张`:'下载ZIP';
+        $('#downloadPngLabel').textContent=images.length>1?`PNG ${images.length} 张`:'下载PNG';
         canvas.hidden=false;
         $('#empty').hidden=true;
       }
@@ -871,12 +882,6 @@
     drop.addEventListener('drop',e=>readFiles(e.dataTransfer.files,true));
     const binds={gridWidth:['widthVal',v=>v+' 颗'],maxColors:['colorsVal',v=>v+' 色'],bright:['brightVal',v=>(v>0?'+':'')+v],sat:['satVal',v=>(v>0?'+':'')+v],smooth:['smoothVal',v=>v]};
     Object.entries(binds).forEach(([id,[out,fmt]])=>$('#'+id).addEventListener('input',e=>{$('#'+out).textContent=fmt(e.target.value);schedule()}));
-    $$('.preset button').forEach(b=>b.onclick=()=>{
-      $$('.preset button').forEach(x=>x.classList.remove('active'));
-      b.classList.add('active');
-      const p={easy:[29,12],balanced:[48,24],detail:[80,40]}[b.dataset.preset];
-      ['gridWidth','maxColors'].forEach((id,i)=>{$('#'+id).value=p[i];$('#'+id).dispatchEvent(new Event('input'))});
-    });
     ['showGrid','showCodes','boardLines','showLegend','showAxis'].forEach(id=>$('#'+id).onchange=()=>{render();refreshCollageCanvases();if(!$('#collagePage').hidden){renderCollageTray();renderCollage()}});
     $('#mirror').onchange=schedule;
     $('#zoomIn').onclick=()=>{zoom=Math.min(5,zoom+.25);applyZoom()};
@@ -917,7 +922,9 @@
       cv.getContext('2d').drawImage(img,0,0,cv.width,cv.height);
       return cv.toDataURL('image/png');
     }
-    function openDownloadModal(){
+    let currentDownloadMode='zip';
+    function openDownloadModal(mode){
+      currentDownloadMode=mode||'zip';
       const valid=images.map((im,i)=>({im,i})).filter(x=>x.im.result);
       if(valid.length===0){toast('请先生成图纸');return}
       const list=$('#downloadList');
@@ -944,7 +951,11 @@
       const checked=checks.filter(c=>c.checked).length;
       $('#downloadCount').textContent=`${checked} / ${checks.length}`;
       $('#downloadCheckAll').checked=checked===checks.length;
-      $('#downloadConfirm').textContent=checked===0?'请选择':`下载 ${checked} 张`;
+      if(currentDownloadMode==='zip'){
+        $('#downloadConfirm').textContent=checked===0?'请选择':`下载 ZIP (${checked})`;
+      }else{
+        $('#downloadConfirm').textContent=checked===0?'请选择':`下载 PNG (${checked})`;
+      }
       $('#downloadConfirm').disabled=checked===0;
     }
     $('#downloadList').addEventListener('change',updateDownloadCount);
@@ -960,7 +971,44 @@
       const indices=checks.map(c=>+c.dataset.idx);
       $('#downloadModal').hidden=true;
       const savedIdx=currentIdx;
+      const mode=currentDownloadMode;
       const scale=Math.max(32,Math.ceil(2600/images[indices[0]].result.w));
+      if(mode==='zip'){
+        toast(`正在打包 ${indices.length} 张图纸…`);
+        if(typeof JSZip==='undefined'){
+          toast('ZIP库加载中…请稍候');
+          await new Promise(r=>setTimeout(r,800));
+        }
+        try{
+          if(typeof JSZip==='undefined')throw new Error('JSZip未加载');
+          const zip=new JSZip();
+          for(let i=0;i<indices.length;i++){
+            showCollageNotice(`正在打包 ${i+1}/${indices.length}…`,false);
+            const item=images[indices[i]];
+            const blob=await getImageBlob(item,scale);
+            const base=item.name.replace(/\.[^.]+$/,'');
+            zip.file(`豆格图纸-${base}-${item.result.w}x${item.result.h}.png`,blob);
+          }
+          hideCollageNotice();
+          toast('正在生成ZIP，请稍候…');
+          const zipBlob=await zip.generateAsync({type:'blob'},meta=>{
+            showCollageNotice(`ZIP生成中 ${Math.round(meta.percent)}%…`,false);
+          });
+          hideCollageNotice();
+          const ts=new Date();
+          const pad=n=>String(n).padStart(2,'0');
+          const zipname=`豆格图纸-${indices.length}张-${ts.getFullYear()}${pad(ts.getMonth()+1)}${pad(ts.getDate())}-${pad(ts.getHours())}${pad(ts.getMinutes())}.zip`;
+          downloadSingle(zipBlob,zipname);
+          currentIdx=savedIdx;
+          if(images[savedIdx]){img=images[savedIdx].img;result=images[savedIdx].result;render();stats()}
+          toast(`已下载 ${indices.length} 张图纸 (ZIP打包)`);
+          return;
+        }catch(e){
+          hideCollageNotice();
+          console.error(e);
+          toast('打包失败，改为逐张下载…');
+        }
+      }
       toast(`开始下载 ${indices.length} 张图纸…`);
       for(let i=0;i<indices.length;i++){
         showCollageNotice(`正在下载 ${i+1}/${indices.length}…`,false);
@@ -975,14 +1023,15 @@
       if(images[savedIdx]){img=images[savedIdx].img;result=images[savedIdx].result;render();stats()}
       toast(`已下载 ${indices.length} 张图纸`);
     };
-    $('#download').onclick=()=>{
+    $('#downloadZip').onclick=()=>{
       const valid=images.filter(it=>it.result);
       if(valid.length===0)return;
-      if(valid.length===1){
-        openDownloadModal();
-        return;
-      }
-      openDownloadModal();
+      openDownloadModal('zip');
+    };
+    $('#downloadPng').onclick=()=>{
+      const valid=images.filter(it=>it.result);
+      if(valid.length===0)return;
+      openDownloadModal('png');
     };
     function openReplaceModal(currentPi){
       replaceTargetIndex=currentPi;
