@@ -72,10 +72,11 @@
     .row output{color:var(--md-primary);font-weight:700;font-variant-numeric:tabular-nums;font-size:13px}
     input[type=range]{width:100%;accent-color:var(--md-primary);height:20px}
     .preset{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
-    .preset.adjust-toggle-big{grid-template-columns:repeat(2,1fr)}
+    .preset.adjust-toggle-big,.preset.mode-toggle-big{grid-template-columns:repeat(2,1fr)}
     .preset button{border:none;background:var(--md-surface-container-high);border-radius:999px;padding:9px 8px;font-size:12px;font-weight:500;cursor:pointer;transition:.15s;color:var(--md-on-surface)}
     .preset button:hover{background:var(--md-surface-variant)}
     .preset button.active{background:var(--md-secondary-container);color:var(--md-on-secondary-container);font-weight:600}
+    .preset.mode-toggle-big button.active{background:var(--md-tertiary-container);color:var(--md-on-tertiary-container);font-weight:600}
     .checks{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px}
     .check{font-size:12px;display:flex;gap:8px;align-items:center;color:var(--md-on-surface-variant);cursor:pointer}
     .check input{accent-color:var(--md-primary);width:16px;height:16px;margin:0}
@@ -247,6 +248,10 @@
             <button class="adj-btn active" id="mainUnified">统一</button>
             <button class="adj-btn" id="mainIndividual">单独</button>
           </div>
+          <div class="preset mode-toggle-big">
+            <button class="mode-btn active" id="modeSoft">柔和</button>
+            <button class="mode-btn" id="modeOutline">描边</button>
+          </div>
           <label class="row">
             <span class="row-head"><span>像素大小</span><output id="widthVal">48 颗</output></span>
             <input id="gridWidth" type="range" min="15" max="116" value="48">
@@ -266,6 +271,10 @@
           <label class="row">
             <span class="row-head"><span>平滑度</span><output id="smoothVal">0</output></span>
             <input id="smooth" type="range" min="0" max="10" value="0">
+          </label>
+          <label class="row" id="outlineRow" hidden>
+            <span class="row-head"><span>描边粗细</span><output id="outlineVal">1 格</output></span>
+            <input id="outline" type="range" min="1" max="2" value="1">
           </label>
         </section>
         <section class="section">
@@ -404,9 +413,10 @@
     let replaceTargetIndex=-1;
     let silentGenerate=false;
     let images=[],currentIdx=-1;
-    const defaultParams={gridWidth:48,maxColors:24,bright:0,sat:0,smooth:0,mirror:false};
-    function getUIParams(){return{gridWidth:+$('#gridWidth').value,maxColors:+$('#maxColors').value,bright:+$('#bright').value,sat:+$('#sat').value,smooth:+$('#smooth').value,mirror:$('#mirror').checked}}
-    function saveParamsToUI(p){$('#gridWidth').value=p.gridWidth;$('#maxColors').value=p.maxColors;$('#bright').value=p.bright;$('#sat').value=p.sat;$('#smooth').value=p.smooth;$('#mirror').checked=p.mirror}
+    const defaultParams={gridWidth:48,maxColors:24,bright:0,sat:0,smooth:0,mirror:false,mode:'soft',outline:1};
+    let currentMode='soft';
+    function getUIParams(){return{gridWidth:+$('#gridWidth').value,maxColors:+$('#maxColors').value,bright:+$('#bright').value,sat:+$('#sat').value,smooth:+$('#smooth').value,mirror:$('#mirror').checked,mode:currentMode,outline:+$('#outline').value}}
+    function saveParamsToUI(p){$('#gridWidth').value=p.gridWidth;$('#maxColors').value=p.maxColors;$('#bright').value=p.bright;$('#sat').value=p.sat;$('#smooth').value=p.smooth;$('#mirror').checked=p.mirror;setMode(p.mode||'soft');$('#outline').value=p.outline!=null?p.outline:1;$('#outlineVal').textContent=$('#outline').value+' 格'}
     const canvas=$('#canvas'),ctx=canvas.getContext('2d',{alpha:false});
     function rgb(hex){return [parseInt(hex.slice(1,3),16),parseInt(hex.slice(3,5),16),parseInt(hex.slice(5,7),16)]}
     function dist(a,b){const rm=(a[0]+b[0])/2,dr=a[0]-b[0],dg=a[1]-b[1],db=a[2]-b[2];return (2+rm/256)*dr*dr+4*dg*dg+(2+(255-rm)/256)*db*db}
@@ -516,6 +526,31 @@
         }
       }
     },80)}
+    function applyOutline(cells,w,h,pal,thickness){
+      thickness=thickness||1;
+      let blackIdx=0,minG=256;
+      for(let pi=0;pi<pal.length;pi++){
+        const c=rgb(pal[pi][2]);
+        const g=0.299*c[0]+0.587*c[1]+0.114*c[2];
+        if(g<minG){minG=g;blackIdx=pi}
+      }
+      const marked=new Uint8Array(w*h);
+      for(let pass=0;pass<thickness;pass++){
+        const toMark=[];
+        for(let y=0;y<h;y++)for(let x=0;x<w;x++){
+          const i=y*w+x;
+          if(marked[i])continue;
+          const c=cells[i];
+          let isEdge=false;
+          if(x===0||y===0||x===w-1||y===h-1){isEdge=true}
+          else{
+            if(cells[y*w+(x-1)]!==c||cells[y*w+(x+1)]!==c||cells[(y-1)*w+x]!==c||cells[(y+1)*w+x]!==c)isEdge=true;
+          }
+          if(isEdge)toMark.push(i);
+        }
+        toMark.forEach(i=>{cells[i]=blackIdx;marked[i]=1});
+      }
+    }
     function denoise(cells,w,h,pal,smooth){
       const N=w*h;
       const nx8=[-1,0,1,-1,1,-1,0,1],ny8=[-1,-1,-1,0,0,1,1,1];
@@ -676,6 +711,7 @@
             cells[i]=grayVals[i]<threshold?blackIdx:whiteIdx;
           }
           denoise(cells,w,h,pal,smooth);
+          if(p.mode==='outline')applyOutline(cells,w,h,pal,p.outline);
           result={w,h,cells,pal};
           finishGenerate();
           return;
@@ -710,6 +746,7 @@
           }
         }
         denoise(cells,w,h,pal,smooth);
+        if(p.mode==='outline')applyOutline(cells,w,h,pal,p.outline);
         result={w,h,cells,pal};
         finishGenerate();
       },10);
@@ -880,8 +917,16 @@
     ['dragenter','dragover'].forEach(n=>drop.addEventListener(n,e=>{e.preventDefault();drop.classList.add('drag')}));
     ['dragleave','drop'].forEach(n=>drop.addEventListener(n,e=>{e.preventDefault();drop.classList.remove('drag')}));
     drop.addEventListener('drop',e=>readFiles(e.dataTransfer.files,true));
-    const binds={gridWidth:['widthVal',v=>v+' 颗'],maxColors:['colorsVal',v=>v+' 色'],bright:['brightVal',v=>(v>0?'+':'')+v],sat:['satVal',v=>(v>0?'+':'')+v],smooth:['smoothVal',v=>v]};
+    const binds={gridWidth:['widthVal',v=>v+' 颗'],maxColors:['colorsVal',v=>v+' 色'],bright:['brightVal',v=>(v>0?'+':'')+v],sat:['satVal',v=>(v>0?'+':'')+v],smooth:['smoothVal',v=>v],outline:['outlineVal',v=>v+' 格']};
     Object.entries(binds).forEach(([id,[out,fmt]])=>$('#'+id).addEventListener('input',e=>{$('#'+out).textContent=fmt(e.target.value);schedule()}));
+    function setMode(m){
+      currentMode=m;
+      $('#modeSoft').classList.toggle('active',m==='soft');
+      $('#modeOutline').classList.toggle('active',m==='outline');
+      $('#outlineRow').hidden=(m!=='outline');
+    }
+    $('#modeSoft').onclick=()=>{if(currentMode==='soft')return;setMode('soft');schedule()};
+    $('#modeOutline').onclick=()=>{if(currentMode==='outline')return;setMode('outline');schedule()};
     ['showGrid','showCodes','boardLines','showLegend','showAxis'].forEach(id=>$('#'+id).onchange=()=>{render();refreshCollageCanvases();if(!$('#collagePage').hidden){renderCollageTray();renderCollage()}});
     $('#mirror').onchange=schedule;
     $('#zoomIn').onclick=()=>{zoom=Math.min(5,zoom+.25);applyZoom()};
