@@ -4,7 +4,6 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>豆格 BEADGRID · 图片转拼豆图纸</title>
-  <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
   <style>
     :root{
       --md-primary:#6750A4;
@@ -176,6 +175,22 @@
     .replace-actions{display:flex;gap:10px;margin-top:20px;justify-content:flex-end}
     .replace-cancel{padding:10px 24px;border:none;background:var(--md-surface-container-high);color:var(--md-on-surface);border-radius:999px;font-size:14px;font-weight:600;cursor:pointer;transition:.15s}
     .replace-cancel:hover{background:var(--md-surface-variant)}
+    .replace-confirm{padding:10px 24px;border:none;background:var(--md-primary);color:var(--md-on-primary);border-radius:999px;font-size:14px;font-weight:600;cursor:pointer;transition:.15s}
+    .replace-confirm:hover{filter:brightness(1.08)}
+    .replace-confirm:disabled{opacity:.5;cursor:not-allowed}
+    .download-list{display:flex;flex-direction:column;gap:8px;max-height:50vh;overflow:auto;margin-bottom:8px}
+    .download-item{display:flex;align-items:center;gap:12px;padding:10px 12px;background:var(--md-surface-container-high);border-radius:12px;cursor:pointer;transition:.15s}
+    .download-item:hover{background:var(--md-surface-variant)}
+    .download-item input{width:18px;height:18px;cursor:pointer;accent-color:var(--md-primary);flex-shrink:0}
+    .download-item-thumb{width:48px;height:48px;border-radius:8px;object-fit:cover;background:var(--md-surface-container-lowest);flex-shrink:0}
+    .download-item-info{flex:1;min-width:0}
+    .download-item-name{font-size:13px;font-weight:600;color:var(--md-on-surface);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .download-item-size{font-size:11px;color:var(--md-on-surface-variant);margin-top:2px}
+    .download-item-pending{font-size:11px;color:var(--md-on-surface-variant);font-style:italic}
+    .download-select-bar{display:flex;align-items:center;gap:12px}
+    .download-check-all{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--md-on-surface);cursor:pointer}
+    .download-check-all input{width:18px;height:18px;cursor:pointer;accent-color:var(--md-primary)}
+    .download-count{font-size:12px;color:var(--md-on-surface-variant)}
     @media(max-width:1200px){.app{grid-template-columns:220px 1fr}}
     @media(max-width:900px){.shell{width:100%;padding:0;height:auto;min-height:100vh}.head-info{display:none}header{padding:0 14px}.app{display:flex;flex-direction:column;border-radius:0;min-height:auto}.left{order:2}.board-shell{min-height:500px;overflow:auto}.empty{width:82vw}}
   </style>
@@ -340,6 +355,23 @@
       <div class="replace-colors" id="replaceColors"></div>
       <div class="replace-actions">
         <button class="replace-cancel" id="replaceCancel">取消</button>
+      </div>
+    </div>
+  </div>
+  <div class="replace-modal" id="downloadModal" hidden>
+    <div class="replace-box" style="max-width:480px">
+      <h3>选择下载图纸</h3>
+      <p id="downloadHint">勾选要下载的图纸，默认全选</p>
+      <div class="download-list" id="downloadList"></div>
+      <div class="replace-actions" style="justify-content:space-between">
+        <div class="download-select-bar">
+          <label class="download-check-all"><input type="checkbox" id="downloadCheckAll" checked> 全选</label>
+          <span class="download-count" id="downloadCount">0 / 0</span>
+        </div>
+        <div style="display:flex;gap:10px">
+          <button class="replace-cancel" id="downloadCancel">取消</button>
+          <button class="replace-confirm" id="downloadConfirm">下载选中</button>
+        </div>
       </div>
     </div>
   </div>
@@ -853,7 +885,7 @@
     canvas.onclick=()=>{if(!result)return;$('#modalImage').src=canvas.toDataURL('image/png');$('#modal').hidden=false};
     $('#modalClose').onclick=()=>$('#modal').hidden=true;
     $('#modal').onclick=e=>{if(e.target.id==='modal')$('#modal').hidden=true};
-    document.addEventListener('keydown',e=>{if(e.key==='Escape'){$('#modal').hidden=true;$('#replaceModal').hidden=true}});
+    document.addEventListener('keydown',e=>{if(e.key==='Escape'){$('#modal').hidden=true;$('#replaceModal').hidden=true;$('#downloadModal').hidden=true}});
     window.addEventListener('resize',()=>{if(result)applyZoom()});
     function getImageBlob(item,scale){
       const savedResult=result,savedImg=img;
@@ -876,59 +908,81 @@
       a.click();
       setTimeout(()=>{document.body.removeChild(a);URL.revokeObjectURL(a.href)},2000);
     }
-    $('#download').onclick=async()=>{
+    function makeThumb(img){
+      const cv=document.createElement('canvas');
+      const S=48;
+      const r=Math.min(S/img.width,S/img.height);
+      cv.width=Math.max(1,Math.round(img.width*r));
+      cv.height=Math.max(1,Math.round(img.height*r));
+      cv.getContext('2d').drawImage(img,0,0,cv.width,cv.height);
+      return cv.toDataURL('image/png');
+    }
+    function openDownloadModal(){
+      const valid=images.map((im,i)=>({im,i})).filter(x=>x.im.result);
+      if(valid.length===0){toast('请先生成图纸');return}
+      const list=$('#downloadList');
+      list.innerHTML='';
+      $('#downloadCheckAll').checked=true;
+      valid.forEach(({im,i})=>{
+        const div=document.createElement('label');
+        div.className='download-item';
+        const thumbSrc=im.canvas?im.canvas.toDataURL('image/png'):makeThumb(im.img);
+        const status=im.result?`${im.result.w}×${im.result.h} · ${im.result.cells.length}格`:'未生成';
+        div.innerHTML=`<input type="checkbox" data-idx="${i}" checked>
+          <img class="download-item-thumb" src="${thumbSrc}" alt="">
+          <div class="download-item-info">
+            <div class="download-item-name">${im.name}</div>
+            <div class="download-item-size">${status}</div>
+          </div>`;
+        list.appendChild(div);
+      });
+      updateDownloadCount();
+      $('#downloadModal').hidden=false;
+    }
+    function updateDownloadCount(){
+      const checks=$$('#downloadList input[type=checkbox]');
+      const checked=checks.filter(c=>c.checked).length;
+      $('#downloadCount').textContent=`${checked} / ${checks.length}`;
+      $('#downloadCheckAll').checked=checked===checks.length;
+      $('#downloadConfirm').textContent=checked===0?'请选择':`下载 ${checked} 张`;
+      $('#downloadConfirm').disabled=checked===0;
+    }
+    $('#downloadList').addEventListener('change',updateDownloadCount);
+    $('#downloadCheckAll').onchange=e=>{
+      $$('#downloadList input[type=checkbox]').forEach(c=>c.checked=e.target.checked);
+      updateDownloadCount();
+    };
+    $('#downloadCancel').onclick=()=>{$('#downloadModal').hidden=true};
+    $('#downloadModal').onclick=e=>{if(e.target.id==='downloadModal')$('#downloadModal').hidden=true};
+    $('#downloadConfirm').onclick=async()=>{
+      const checks=$$('#downloadList input[type=checkbox]').filter(c=>c.checked);
+      if(checks.length===0)return;
+      const indices=checks.map(c=>+c.dataset.idx);
+      $('#downloadModal').hidden=true;
+      const savedIdx=currentIdx;
+      const scale=Math.max(32,Math.ceil(2600/images[indices[0]].result.w));
+      toast(`开始下载 ${indices.length} 张图纸…`);
+      for(let i=0;i<indices.length;i++){
+        showCollageNotice(`正在下载 ${i+1}/${indices.length}…`,false);
+        const item=images[indices[i]];
+        const blob=await getImageBlob(item,scale);
+        const base=item.name.replace(/\.[^.]+$/,'');
+        downloadSingle(blob,`豆格图纸-${base}-${item.result.w}x${item.result.h}.png`);
+        await new Promise(r=>setTimeout(r,1100));
+      }
+      hideCollageNotice();
+      currentIdx=savedIdx;
+      if(images[savedIdx]){img=images[savedIdx].img;result=images[savedIdx].result;render();stats()}
+      toast(`已下载 ${indices.length} 张图纸`);
+    };
+    $('#download').onclick=()=>{
       const valid=images.filter(it=>it.result);
       if(valid.length===0)return;
-      const scale=Math.max(32,Math.ceil(2600/result.w));
       if(valid.length===1){
-        const blob=await getImageBlob(valid[0],scale);
-        const base=valid[0].name.replace(/\.[^.]+$/,'');
-        downloadSingle(blob,`豆格图纸-${base}-${valid[0].result.w}x${valid[0].result.h}.png`);
-        render();
-        toast('高清图纸已下载');
+        openDownloadModal();
         return;
       }
-      toast(`正在打包 ${valid.length} 张图纸…`);
-      if(typeof JSZip==='undefined'){
-        toast('ZIP库加载中…请稍候');
-        await new Promise(r=>setTimeout(r,800));
-      }
-      try{
-        if(typeof JSZip==='undefined')throw new Error('JSZip未加载');
-        const zip=new JSZip();
-        for(let i=0;i<valid.length;i++){
-          showCollageNotice(`正在打包 ${i+1}/${valid.length}…`,false);
-          const item=valid[i];
-          const blob=await getImageBlob(item,scale);
-          const base=item.name.replace(/\.[^.]+$/,'');
-          zip.file(`豆格图纸-${base}-${item.result.w}x${item.result.h}.png`,blob);
-        }
-        hideCollageNotice();
-        toast('正在生成ZIP，请稍候…');
-        const zipBlob=await zip.generateAsync({type:'blob'},meta=>{
-          showCollageNotice(`ZIP生成中 ${Math.round(meta.percent)}%…`,false);
-        });
-        hideCollageNotice();
-        const ts=new Date();
-        const pad=n=>String(n).padStart(2,'0');
-        const zipname=`豆格图纸-${valid.length}张-${ts.getFullYear()}${pad(ts.getMonth()+1)}${pad(ts.getDate())}-${pad(ts.getHours())}${pad(ts.getMinutes())}.zip`;
-        downloadSingle(zipBlob,zipname);
-        render();
-        toast(`已下载 ${valid.length} 张图纸 (ZIP打包)`);
-      }catch(e){
-        hideCollageNotice();
-        console.error(e);
-        toast('打包失败，改为逐个下载…');
-        for(let i=0;i<valid.length;i++){
-          const item=valid[i];
-          const blob=await getImageBlob(item,scale);
-          const base=item.name.replace(/\.[^.]+$/,'');
-          downloadSingle(blob,`豆格图纸-${base}-${item.result.w}x${item.result.h}.png`);
-          await new Promise(r=>setTimeout(r,1200));
-        }
-        render();
-        toast(`已下载 ${valid.length} 张图纸`);
-      }
+      openDownloadModal();
     };
     function openReplaceModal(currentPi){
       replaceTargetIndex=currentPi;
