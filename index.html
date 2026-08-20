@@ -277,8 +277,8 @@
             <input id="outline" type="range" min="1" max="2" value="1">
           </label>
           <label class="row" id="outlineSensRow" hidden>
-            <span class="row-head"><span>描边敏感度</span><output id="outlineSensVal">中</output></span>
-            <input id="outlineSens" type="range" min="100" max="1500" step="50" value="450">
+            <span class="row-head"><span>简化程度</span><output id="outlineSensVal">中</output></span>
+            <input id="outlineSens" type="range" min="1" max="30" step="1" value="8">
           </label>
         </section>
         <section class="section">
@@ -417,10 +417,10 @@
     let replaceTargetIndex=-1;
     let silentGenerate=false;
     let images=[],currentIdx=-1;
-    const defaultParams={gridWidth:48,maxColors:24,bright:0,sat:0,smooth:0,mirror:false,mode:'soft',outline:1,outlineSens:450};
+    const defaultParams={gridWidth:48,maxColors:24,bright:0,sat:0,smooth:0,mirror:false,mode:'soft',outline:1,outlineSens:8};
     let currentMode='soft';
     function getUIParams(){return{gridWidth:+$('#gridWidth').value,maxColors:+$('#maxColors').value,bright:+$('#bright').value,sat:+$('#sat').value,smooth:+$('#smooth').value,mirror:$('#mirror').checked,mode:currentMode,outline:+$('#outline').value,outlineSens:+$('#outlineSens').value}}
-    function saveParamsToUI(p){$('#gridWidth').value=p.gridWidth;$('#maxColors').value=p.maxColors;$('#bright').value=p.bright;$('#sat').value=p.sat;$('#smooth').value=p.smooth;$('#mirror').checked=p.mirror;setMode(p.mode||'soft');$('#outline').value=p.outline!=null?p.outline:1;$('#outlineVal').textContent=$('#outline').value+' 格';$('#outlineSens').value=p.outlineSens!=null?p.outlineSens:450;$('#outlineSensVal').textContent=sensLabel($('#outlineSens').value)}
+    function saveParamsToUI(p){$('#gridWidth').value=p.gridWidth;$('#maxColors').value=p.maxColors;$('#bright').value=p.bright;$('#sat').value=p.sat;$('#smooth').value=p.smooth;$('#mirror').checked=p.mirror;setMode(p.mode||'soft');$('#outline').value=p.outline!=null?p.outline:1;$('#outlineVal').textContent=$('#outline').value+' 格';$('#outlineSens').value=p.outlineSens!=null?p.outlineSens:8;$('#outlineSensVal').textContent=sensLabel($('#outlineSens').value)}
     const canvas=$('#canvas'),ctx=canvas.getContext('2d',{alpha:false});
     function rgb(hex){return [parseInt(hex.slice(1,3),16),parseInt(hex.slice(3,5),16),parseInt(hex.slice(5,7),16)]}
     function dist(a,b){const rm=(a[0]+b[0])/2,dr=a[0]-b[0],dg=a[1]-b[1],db=a[2]-b[2];return (2+rm/256)*dr*dr+4*dg*dg+(2+(255-rm)/256)*db*db}
@@ -530,37 +530,89 @@
         }
       }
     },80)}
-    function applyOutline(cells,w,h,pal,thickness,sensitivity){
+    function simplifyIslands(cells,w,h,minSize){
+      if(minSize<=1)return;
+      const N=w*h;
+      const visited=new Uint8Array(N);
+      const labels=new Int32Array(N).fill(-1);
+      const regionSize=[];
+      let label=0;
+      const queue=[];
+      for(let y=0;y<h;y++)for(let x=0;x<w;x++){
+        const i=y*w+x;
+        if(visited[i])continue;
+        const color=cells[i];
+        queue.length=0;
+        queue.push(i);
+        visited[i]=1;
+        let size=0;
+        const cellsList=[];
+        while(queue.length){
+          const cur=queue.pop();
+          cellsList.push(cur);
+          size++;
+          const cx=cur%w,cy=(cur-cx)/w;
+          if(cx>0){const ni=cur-1;if(!visited[ni]&&cells[ni]===color){visited[ni]=1;queue.push(ni)}}
+          if(cx<w-1){const ni=cur+1;if(!visited[ni]&&cells[ni]===color){visited[ni]=1;queue.push(ni)}}
+          if(cy>0){const ni=cur-w;if(!visited[ni]&&cells[ni]===color){visited[ni]=1;queue.push(ni)}}
+          if(cy<h-1){const ni=cur+w;if(!visited[ni]&&cells[ni]===color){visited[ni]=1;queue.push(ni)}}
+        }
+        regionSize.push(size);
+        for(const ci of cellsList)labels[ci]=label;
+        label++;
+      }
+      const mergeMap=new Int32Array(label).fill(-1);
+      for(let r=0;r<label;r++){
+        if(regionSize[r]>=minSize){mergeMap[r]=r;continue}
+        const regionCells=[];
+        for(let i=0;i<N;i++)if(labels[i]===r)regionCells.push(i);
+        const colorCounts={};
+        for(const ci of regionCells){
+          const cx=ci%w,cy=(ci-cx)/w;
+          const neighbors=[];
+          if(cx>0)neighbors.push(ci-1);
+          if(cx<w-1)neighbors.push(ci+1);
+          if(cy>0)neighbors.push(ci-w);
+          if(cy<h-1)neighbors.push(ci+w);
+          for(const ni of neighbors){
+            const nl=labels[ni];
+            if(nl!==r&&mergeMap[nl]!==-1){
+              const targetColor=cells[ni];
+              colorCounts[targetColor]=(colorCounts[targetColor]||0)+1;
+            }
+          }
+        }
+        let bestColor=-1,bestCount=0;
+        for(const c in colorCounts)if(colorCounts[c]>bestCount){bestCount=colorCounts[c];bestColor=+c}
+        if(bestColor===-1)bestColor=cells[regionCells[0]];
+        for(const ci of regionCells)cells[ci]=bestColor;
+        mergeMap[r]=-2;
+      }
+    }
+    function applyOutline(cells,w,h,pal,thickness,islandSize){
       thickness=thickness||1;
-      sensitivity=sensitivity!=null?sensitivity:450;
+      islandSize=islandSize!=null?islandSize:8;
+      simplifyIslands(cells,w,h,islandSize);
       let blackIdx=0,minG=256;
-      const grays=pal.map((p,pi)=>{const c=rgb(p[2]);return{pi,g:0.299*c[0]+0.587*c[1]+0.114*c[2]}});
-      grays.sort((a,b)=>a.g-b.g);
-      const darkCount=Math.max(1,Math.floor(grays.length*0.15));
-      const darkSet=new Set(grays.slice(0,darkCount).map(x=>x.pi));
-      let minDistToDark=Infinity;
-      grays.slice(0,Math.max(1,Math.floor(grays.length*0.3))).forEach(x=>{const d=dist(rgb(pal[x.pi][2]),[0,0,0]);if(d<minDistToDark)minDistToDark=d});
-      blackIdx=grays[0].pi;
+      for(let pi=0;pi<pal.length;pi++){
+        const c=rgb(pal[pi][2]);
+        const g=0.299*c[0]+0.587*c[1]+0.114*c[2];
+        if(g<minG){minG=g;blackIdx=pi}
+      }
       const marked=new Uint8Array(w*h);
       const palCache=pal.map(p=>rgb(p[2]));
+      const out=new Uint8Array(w*h);
       for(let pass=0;pass<thickness;pass++){
         const toMark=[];
         for(let y=0;y<h;y++)for(let x=0;x<w;x++){
           const i=y*w+x;
           if(marked[i])continue;
           const cIdx=cells[i];
-          const cRGB=palCache[cIdx];
           let isEdge=false;
           if(x===0||y===0||x===w-1||y===h-1){
             isEdge=true;
           }else{
-            const neighbors=[[0,-1],[0,1],[-1,0],[1,0]];
-            for(const [dx,dy] of neighbors){
-              const nIdx=cells[(y+dy)*w+(x+dx)];
-              if(nIdx===cIdx)continue;
-              const d=dist(cRGB,palCache[nIdx]);
-              if(d>=sensitivity){isEdge=true;break}
-            }
+            if(cells[y*w+(x-1)]!==cIdx||cells[y*w+(x+1)]!==cIdx||cells[(y-1)*w+x]!==cIdx||cells[(y+1)*w+x]!==cIdx)isEdge=true;
           }
           if(isEdge)toMark.push(i);
         }
@@ -935,7 +987,7 @@
     drop.addEventListener('drop',e=>readFiles(e.dataTransfer.files,true));
     const binds={gridWidth:['widthVal',v=>v+' 颗'],maxColors:['colorsVal',v=>v+' 色'],bright:['brightVal',v=>(v>0?'+':'')+v],sat:['satVal',v=>(v>0?'+':'')+v],smooth:['smoothVal',v=>v],outline:['outlineVal',v=>v+' 格'],outlineSens:['outlineSensVal',sensLabel]};
     Object.entries(binds).forEach(([id,[out,fmt]])=>$('#'+id).addEventListener('input',e=>{$('#'+out).textContent=fmt(e.target.value);schedule()}));
-    function sensLabel(v){v=+v;if(v<=200)return'极低';if(v<=400)return'低';if(v<=700)return'中';if(v<=1100)return'高';return'极高'}
+    function sensLabel(v){v=+v;if(v<=2)return'极低';if(v<=5)return'低';if(v<=12)return'中';if(v<=20)return'高';return'极高'}
     function setMode(m){
       currentMode=m;
       $('#modeSoft').classList.toggle('active',m==='soft');
