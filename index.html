@@ -449,6 +449,28 @@
       }
       return selected;
     }
+    function normalizeGridSamples(samples){
+      // 成品豆格图常带有缩放、抗锯齿或压缩产生的微小色差。将肉眼相同的
+      // 近似色聚为同一源色，防止一块纯色区域被拆成多个相邻色号。
+      const clusters=[],labels=new Array(samples.length),mergeDistance=1800;
+      samples.forEach((color,i)=>{
+        let best=-1,bd=Infinity;
+        for(let ci=0;ci<clusters.length;ci++){
+          const dd=dist(color,clusters[ci].color);
+          if(dd<bd){bd=dd;best=ci}
+        }
+        if(best<0||bd>mergeDistance){
+          best=clusters.length;
+          clusters.push({color:color.slice(),count:1});
+        }else{
+          const cluster=clusters[best],n=cluster.count+1;
+          for(let k=0;k<3;k++)cluster.color[k]=(cluster.color[k]*cluster.count+color[k])/n;
+          cluster.count=n;
+        }
+        labels[i]=best;
+      });
+      return labels.map(label=>clusters[label].color);
+    }
     function toast(t){const el=$('#toast');el.textContent=t;el.classList.add('show');setTimeout(()=>el.classList.remove('show'),1800)}
     function isImageFile(f){
       return !!f&&(f.type.startsWith('image/')||/\.(png|jpe?g|webp|gif|bmp|avif)$/i.test(f.name||''));
@@ -686,10 +708,11 @@
               sourceData[si+2]*alpha+255*(1-alpha)
             ];
           }
-          // 先统计最常用的色号，再在颜色上限内重匹配，避免压缩噪点和细微渐变
-          // 被拆成大量肉眼几乎相同的 MARD 色号。格子数量和位置完全不变。
+          const normalizedSamples=normalizeGridSamples(samples);
+          // 先合并同源近似色，再统计代表色号并在颜色上限内重匹配。
+          // 格子数量和位置完全不变。
           const usage=pal.map((entry,pi)=>[pi,0]);
-          samples.forEach(color=>{
+          normalizedSamples.forEach(color=>{
             let best=0,bd=Infinity;
             for(let pi=0;pi<pal.length;pi++){
               const dd=dist(color,rgb(pal[pi][2]));
@@ -698,7 +721,7 @@
             usage[best][1]++;
           });
           const allowed=selectDiverseColors(usage,pal,Math.min(p.maxColors,pal.length));
-          samples.forEach((color,i)=>{
+          normalizedSamples.forEach((color,i)=>{
             let best=allowed[0],bd=Infinity;
             allowed.forEach(pi=>{
               const dd=dist(color,rgb(pal[pi][2]));
