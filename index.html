@@ -645,24 +645,39 @@
           source.width=sourceW;source.height=sourceH;
           sc.drawImage(img,0,0);
           const sourceData=sc.getImageData(0,0,sourceW,sourceH).data;
-          const pal=palettes.mard,cells=new Array(w*h);
+          const pal=palettes.mard,cells=new Array(w*h),samples=new Array(w*h);
           for(let y=0;y<h;y++)for(let x=0;x<w;x++){
             const sampleX=p.mirror?w-1-x:x;
             const sx=Math.min(sourceW-1,Math.floor((sampleX+.5)*sourceW/w));
             const sy=Math.min(sourceH-1,Math.floor((y+.5)*sourceH/h));
             const si=(sy*sourceW+sx)*4,alpha=sourceData[si+3]/255;
-            const color=[
+            samples[y*w+x]=[
               sourceData[si]*alpha+255*(1-alpha),
               sourceData[si+1]*alpha+255*(1-alpha),
               sourceData[si+2]*alpha+255*(1-alpha)
             ];
+          }
+          // 先统计最常用的色号，再在颜色上限内重匹配，避免压缩噪点和细微渐变
+          // 被拆成大量肉眼几乎相同的 MARD 色号。格子数量和位置完全不变。
+          const usage=pal.map((entry,pi)=>[pi,0]);
+          samples.forEach(color=>{
             let best=0,bd=Infinity;
             for(let pi=0;pi<pal.length;pi++){
               const dd=dist(color,rgb(pal[pi][2]));
               if(dd<bd){bd=dd;best=pi}
             }
-            cells[y*w+x]=best;
-          }
+            usage[best][1]++;
+          });
+          usage.sort((a,b)=>b[1]-a[1]);
+          const allowed=usage.filter(entry=>entry[1]>0).slice(0,Math.min(p.maxColors,pal.length)).map(entry=>entry[0]);
+          samples.forEach((color,i)=>{
+            let best=allowed[0],bd=Infinity;
+            allowed.forEach(pi=>{
+              const dd=dist(color,rgb(pal[pi][2]));
+              if(dd<bd){bd=dd;best=pi}
+            });
+            cells[i]=best;
+          });
           result={w,h,cells,pal};
           finishGenerate();
           return;
@@ -972,12 +987,14 @@
       $('#modePhoto').setAttribute('aria-pressed',inputMode==='photo');
       $('#modeGrid').setAttribute('aria-pressed',inputMode==='grid');
       const direct=inputMode==='grid';
-      ['maxColors','bright','sat','smooth'].forEach(id=>{$('#'+id).disabled=direct});
-      ['maxColorsRow','brightRow','satRow','smoothRow'].forEach(id=>{$('#'+id).style.opacity=direct?'.38':'1'});
+      ['bright','sat','smooth'].forEach(id=>{$('#'+id).disabled=direct});
+      ['brightRow','satRow','smoothRow'].forEach(id=>{$('#'+id).style.opacity=direct?'.38':'1'});
+      $('#maxColors').disabled=false;
+      $('#maxColorsRow').style.opacity='1';
       if(regenerate){
         if(currentIdx>=0&&images[currentIdx])images[currentIdx].params=getUIParams();
         schedule();
-        toast(direct?'现成豆格图模式：仅取格子中心并标注':'照片转图纸模式');
+        toast(direct?'现成豆格图模式：保留格子并合并近似色':'照片转图纸模式');
       }
     }
     $('#modePhoto').onclick=()=>setInputMode('photo');
