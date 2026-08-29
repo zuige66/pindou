@@ -113,6 +113,7 @@
     .collage-fab{position:fixed;right:24px;bottom:24px;z-index:50;display:flex;align-items:center;gap:6px;background:var(--md-primary);color:var(--md-on-primary);border:none;border-radius:999px;padding:14px 20px;gap:8px;font-size:14px;font-weight:600;cursor:pointer;box-shadow:0 8px 24px rgba(0,0,0,.18);transition:.2s}
     .collage-fab:hover{transform:translateY(-2px);box-shadow:0 12px 32px rgba(0,0,0,.24)}
     .collage-fab svg{width:20px;height:20px}
+    .original-collage-fab{bottom:86px;background:var(--md-tertiary);color:var(--md-on-tertiary)}
     .collage-page{position:fixed;inset:0;z-index:100;background:var(--md-surface);display:flex;flex-direction:column}
     .collage-header{display:flex;align-items:center;gap:16px;padding:14px 24px;background:var(--md-surface);border-bottom:1px solid var(--md-outline-variant)}
     .collage-header strong{font-size:16px;font-weight:600}
@@ -330,6 +331,10 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
           <span>去拼图</span>
         </button>
+        <button class="collage-fab original-collage-fab" id="originalCollageFab" hidden>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="8" height="18"/><rect x="13" y="3" width="8" height="18"/></svg>
+          <span>原图拼图</span>
+        </button>
       </main>
     </div>
   </div>
@@ -358,6 +363,25 @@
       <div class="collage-hint" id="collageHint">拖拽或点击图片可换位 · 间隙滑块调整间距 · 当前：统一调整</div>
     </div>
     <div class="collage-tray" id="collageTray"></div>
+  </div>
+  <div class="collage-page" id="originalCollagePage" hidden>
+    <div class="collage-header">
+      <button class="collage-back" id="originalCollageBack">← 返回</button>
+      <strong>原图拼图 · 1:1</strong>
+      <div class="collage-tools">
+        <div class="collage-grid-picker" id="originalGridPicker">
+          <button data-grid="2" class="active">2 张左右</button>
+          <button data-grid="4">4 张四角</button>
+          <button data-grid="9">九宫格</button>
+        </div>
+        <label class="collage-gap">间隙 <output id="originalGapVal">0</output><input id="originalCollageGap" type="range" min="0" max="40" value="0"></label>
+        <button class="collage-download" id="originalCollageDownload">下载 1:1 拼图</button>
+      </div>
+    </div>
+    <div class="collage-canvas-wrap">
+      <canvas id="originalCollageCanvas"></canvas>
+      <div class="collage-hint">使用上传原图 · 按上传顺序排列 · 输出 1800 × 1800 PNG</div>
+    </div>
   </div>
   <div class="toast" id="toast"></div>
   <div class="modal" id="modal" hidden><button id="modalClose" aria-label="关闭">×</button><img id="modalImage" alt="放大查看拼豆图纸"></div>
@@ -530,13 +554,16 @@
     function renderThumbs(){
       const strip=$('#thumbStrip');
       const fab=$('#collageFab');
-      if(images.length<=1){strip.hidden=true;strip.innerHTML='';fab.hidden=true;return}
+      const originalFab=$('#originalCollageFab');
+      if(images.length<=1){strip.hidden=true;strip.innerHTML='';fab.hidden=true;originalFab.hidden=true;return}
       strip.hidden=false;
       fab.hidden=false;
+      originalFab.hidden=false;
       strip.innerHTML=images.map((it,i)=>`<div class="thumb${i===currentIdx?' active':''}" data-idx="${i}"><span class="thumb-num">${i+1}</span><img src="${it.img.src}" alt="${it.name}"><button class="thumb-del" data-del="${i}" title="移除">×</button></div>`).join('');
       [...strip.querySelectorAll('.thumb')].forEach(el=>el.onclick=e=>{if(e.target.dataset.del!==undefined)return;selectImage(+el.dataset.idx)});
       [...strip.querySelectorAll('.thumb-del')].forEach(el=>el.onclick=e=>{e.stopPropagation();removeImage(+el.dataset.del)});
       if(!$('#collagePage').hidden)updateGridPickerState();
+      if(!$('#originalCollagePage').hidden){originalCollage.grid=availableOriginalGrid();updateOriginalGridPicker();renderOriginalCollage()}
     }
     function removeImage(idx){
       images.splice(idx,1);
@@ -544,7 +571,7 @@
         .filter(i=>i!==idx)
         .map(i=>i>idx?i-1:i);
       if(collage.order.length===0)collage.grid=2;
-      if(images.length<2){$('#collageFab').hidden=true;$('#collagePage').hidden=true}
+      if(images.length<2){$('#collageFab').hidden=true;$('#originalCollageFab').hidden=true;$('#collagePage').hidden=true;$('#originalCollagePage').hidden=true}
       if(images.length===0){
         currentIdx=-1;img=null;result=null;
         canvas.hidden=true;$('#empty').hidden=false;
@@ -1662,7 +1689,84 @@
         toast('拼图已下载');
       },'image/png',1.0);
     };
-    window.addEventListener('resize',()=>{if(!$('#collagePage').hidden)renderCollage()});
+    // ===== Original Image Square Collage =====
+    const originalCollage={grid:2,gap:0};
+    const originalCanvas=$('#originalCollageCanvas');
+    const originalCtx=originalCanvas.getContext('2d');
+    function originalGridDims(grid){return grid===2?[1,2]:grid===4?[2,2]:[3,3]}
+    function availableOriginalGrid(){return images.length>=9?9:images.length>=4?4:2}
+    function drawCover(context,source,x,y,w,h){
+      const sw=source.naturalWidth||source.width,sh=source.naturalHeight||source.height;
+      if(!sw||!sh)return;
+      const sourceRatio=sw/sh,targetRatio=w/h;
+      let cropW=sw,cropH=sh,cropX=0,cropY=0;
+      if(sourceRatio>targetRatio){cropW=sh*targetRatio;cropX=(sw-cropW)/2}
+      else{cropH=sw/targetRatio;cropY=(sh-cropH)/2}
+      context.drawImage(source,cropX,cropY,cropW,cropH,x,y,w,h);
+    }
+    function updateOriginalGridPicker(){
+      const available=availableOriginalGrid();
+      $$('#originalGridPicker button').forEach(btn=>{
+        const grid=+btn.dataset.grid;
+        btn.disabled=grid>available;
+        btn.style.opacity=btn.disabled?'.5':'';
+        btn.classList.toggle('active',grid===originalCollage.grid);
+        btn.title=btn.disabled?`需要至少 ${grid} 张原图`:'';
+      });
+    }
+    function paintOriginalCollage(context,size,gap){
+      const [rows,cols]=originalGridDims(originalCollage.grid);
+      const cellW=(size-gap*(cols-1))/cols,cellH=(size-gap*(rows-1))/rows;
+      context.fillStyle='#fff';context.fillRect(0,0,size,size);
+      for(let i=0;i<rows*cols;i++){
+        const row=Math.floor(i/cols),col=i%cols;
+        const x=col*(cellW+gap),y=row*(cellH+gap);
+        context.fillStyle='#eee';context.fillRect(x,y,cellW,cellH);
+        if(images[i])drawCover(context,images[i].img,x,y,cellW,cellH);
+      }
+    }
+    function renderOriginalCollage(){
+      const size=Math.max(180,Math.min(window.innerWidth-80,window.innerHeight-220,900));
+      const dpr=window.devicePixelRatio||1;
+      originalCanvas.width=Math.round(size*dpr);originalCanvas.height=Math.round(size*dpr);
+      originalCanvas.style.width=size+'px';originalCanvas.style.height=size+'px';
+      originalCtx.setTransform(dpr,0,0,dpr,0,0);
+      paintOriginalCollage(originalCtx,size,originalCollage.gap);
+    }
+    function openOriginalCollage(){
+      if(images.length<2)return toast('至少需要 2 张图片');
+      originalCollage.grid=availableOriginalGrid();
+      updateOriginalGridPicker();
+      const page=$('#originalCollagePage');
+      page.removeAttribute('hidden');page.style.display='flex';
+      renderOriginalCollage();
+    }
+    function closeOriginalCollage(){
+      const page=$('#originalCollagePage');page.setAttribute('hidden','');page.style.display='';
+    }
+    $('#originalCollageFab').onclick=openOriginalCollage;
+    $('#originalCollageBack').onclick=closeOriginalCollage;
+    $('#originalGridPicker').onclick=e=>{
+      const btn=e.target.closest('button');if(!btn||btn.disabled)return;
+      originalCollage.grid=+btn.dataset.grid;updateOriginalGridPicker();renderOriginalCollage();
+    };
+    $('#originalCollageGap').oninput=e=>{
+      originalCollage.gap=+e.target.value;$('#originalGapVal').textContent=originalCollage.gap;renderOriginalCollage();
+    };
+    $('#originalCollageDownload').onclick=()=>{
+      const size=1800,dl=document.createElement('canvas');dl.width=size;dl.height=size;
+      const dc=dl.getContext('2d');
+      paintOriginalCollage(dc,size,originalCollage.gap*2);
+      dl.toBlob(blob=>{
+        const a=document.createElement('a'),ts=new Date().toISOString().slice(0,19).replace(/[:T]/g,'-');
+        a.href=URL.createObjectURL(blob);a.download=`原图拼图-1比1-${originalCollage.grid}张-${ts}.png`;a.click();
+        setTimeout(()=>URL.revokeObjectURL(a.href),2000);toast('1:1 原图拼图已下载');
+      },'image/png',1);
+    };
+    window.addEventListener('resize',()=>{
+      if(!$('#collagePage').hidden)renderCollage();
+      if(!$('#originalCollagePage').hidden)renderOriginalCollage();
+    });
   </script>
 </body>
 </html>
