@@ -380,7 +380,7 @@
     </div>
     <div class="collage-canvas-wrap">
       <canvas id="originalCollageCanvas"></canvas>
-      <div class="collage-hint">使用上传原图 · 按上传顺序排列 · 输出 1800 × 1800 PNG</div>
+      <div class="collage-hint">拖动图片可调整取景位置 · 按上传顺序排列 · 输出 1800 × 1800 PNG</div>
     </div>
   </div>
   <div class="toast" id="toast"></div>
@@ -1690,18 +1690,18 @@
       },'image/png',1.0);
     };
     // ===== Original Image Square Collage =====
-    const originalCollage={grid:2,gap:0};
+    const originalCollage={grid:2,gap:0,positions:[],drag:null};
     const originalCanvas=$('#originalCollageCanvas');
     const originalCtx=originalCanvas.getContext('2d');
     function originalGridDims(grid){return grid===2?[1,2]:grid===4?[2,2]:[3,3]}
     function availableOriginalGrid(){return images.length>=9?9:images.length>=4?4:2}
-    function drawCover(context,source,x,y,w,h){
+    function drawCover(context,source,x,y,w,h,position={x:0,y:0}){
       const sw=source.naturalWidth||source.width,sh=source.naturalHeight||source.height;
       if(!sw||!sh)return;
       const sourceRatio=sw/sh,targetRatio=w/h;
       let cropW=sw,cropH=sh,cropX=0,cropY=0;
-      if(sourceRatio>targetRatio){cropW=sh*targetRatio;cropX=(sw-cropW)/2}
-      else{cropH=sw/targetRatio;cropY=(sh-cropH)/2}
+      if(sourceRatio>targetRatio){cropW=sh*targetRatio;cropX=(sw-cropW)*(position.x+1)/2}
+      else{cropH=sw/targetRatio;cropY=(sh-cropH)*(position.y+1)/2}
       context.drawImage(source,cropX,cropY,cropW,cropH,x,y,w,h);
     }
     function updateOriginalGridPicker(){
@@ -1722,7 +1722,7 @@
         const row=Math.floor(i/cols),col=i%cols;
         const x=col*(cellW+gap),y=row*(cellH+gap);
         context.fillStyle='#eee';context.fillRect(x,y,cellW,cellH);
-        if(images[i])drawCover(context,images[i].img,x,y,cellW,cellH);
+        if(images[i])drawCover(context,images[i].img,x,y,cellW,cellH,originalCollage.positions[i]||{x:0,y:0});
       }
     }
     function renderOriginalCollage(){
@@ -1733,13 +1733,26 @@
       originalCtx.setTransform(dpr,0,0,dpr,0,0);
       paintOriginalCollage(originalCtx,size,originalCollage.gap);
     }
+    function originalCellAt(clientX,clientY){
+      const rect=originalCanvas.getBoundingClientRect();
+      const x=(clientX-rect.left)*(originalCanvas.width/(window.devicePixelRatio||1))/rect.width;
+      const y=(clientY-rect.top)*(originalCanvas.height/(window.devicePixelRatio||1))/rect.height;
+      const [rows,cols]=originalGridDims(originalCollage.grid);
+      const size=originalCanvas.width/(window.devicePixelRatio||1),gap=originalCollage.gap;
+      const cellW=(size-gap*(cols-1))/cols,cellH=(size-gap*(rows-1))/rows;
+      const col=Math.floor(x/(cellW+gap)),row=Math.floor(y/(cellH+gap));
+      if(col<0||col>=cols||row<0||row>=rows)return null;
+      const index=row*cols+col;
+      if(!images[index]||x>col*(cellW+gap)+cellW||y>row*(cellH+gap)+cellH)return null;
+      return {index,cellW,cellH};
+    }
     function openOriginalCollage(){
       if(images.length<2)return toast('至少需要 2 张图片');
       originalCollage.grid=availableOriginalGrid();
       updateOriginalGridPicker();
       const page=$('#originalCollagePage');
       page.removeAttribute('hidden');page.style.display='flex';
-      renderOriginalCollage();
+      renderOriginalCollage();originalCanvas.style.cursor='grab';
     }
     function closeOriginalCollage(){
       const page=$('#originalCollagePage');page.setAttribute('hidden','');page.style.display='';
@@ -1753,6 +1766,26 @@
     $('#originalCollageGap').oninput=e=>{
       originalCollage.gap=+e.target.value;$('#originalGapVal').textContent=originalCollage.gap;renderOriginalCollage();
     };
+    originalCanvas.addEventListener('pointerdown',e=>{
+      const hit=originalCellAt(e.clientX,e.clientY);if(!hit)return;
+      originalCollage.drag={...hit,startX:e.clientX,startY:e.clientY,position:{...(originalCollage.positions[hit.index]||{x:0,y:0})}};
+      originalCanvas.setPointerCapture(e.pointerId);originalCanvas.style.cursor='grabbing';
+    });
+    originalCanvas.addEventListener('pointermove',e=>{
+      const drag=originalCollage.drag;if(!drag)return;
+      const position=originalCollage.positions[drag.index]||{x:0,y:0};
+      position.x=Math.max(-1,Math.min(1,drag.position.x-(e.clientX-drag.startX)*2/drag.cellW));
+      position.y=Math.max(-1,Math.min(1,drag.position.y-(e.clientY-drag.startY)*2/drag.cellH));
+      originalCollage.positions[drag.index]=position;
+      paintOriginalCollage(originalCtx,originalCanvas.width/(window.devicePixelRatio||1),originalCollage.gap);
+    });
+    function endOriginalDrag(e){
+      if(!originalCollage.drag)return;
+      originalCollage.drag=null;originalCanvas.style.cursor='grab';
+      if(originalCanvas.hasPointerCapture(e.pointerId))originalCanvas.releasePointerCapture(e.pointerId);
+    }
+    originalCanvas.addEventListener('pointerup',endOriginalDrag);
+    originalCanvas.addEventListener('pointercancel',endOriginalDrag);
     $('#originalCollageDownload').onclick=()=>{
       const size=1800,dl=document.createElement('canvas');dl.width=size;dl.height=size;
       const dc=dl.getContext('2d');
